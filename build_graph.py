@@ -36,6 +36,23 @@ actions_df.rename(columns={"код действия": "name",
                            "код вх источников\nсписок через зяпятую": "ins",
                            "код выхода": "outs"
                            }, inplace=True)
+
+# filtering one-in one-output actions
+cols = ['name', 'ins', 'outs']
+for col in cols:
+    actions_df[col] = actions_df[col].str.replace(' ', '')
+
+cond1 = (actions_df.ins.str.split(',').str.len() == 1)
+cond2 = (actions_df.outs.str.split(',').str.len() == 1)
+one_action = actions_df[cond1 & cond2].copy()
+# actions_df.drop( one_action.index, inplace=True )
+arrows = list(zip(one_action.ins, one_action.name)) + list(zip(one_action.name, one_action.outs))
+actions = list(zip(zip(one_action.ins, one_action.name), zip(one_action.name, one_action.outs)))
+
+def edge_processed(x: tuple, actions: list=actions) -> tuple:
+    elem = [i for i in actions if i[0] == x or i[1] == x][0]
+    return elem[0][0], elem[1][1]
+
 data_df = pd.read_excel(data_file_name)
 data_df.rename(columns={"Код": "name"}, inplace=True)
 branchings_df = pd.read_excel(branching_name)
@@ -64,6 +81,7 @@ pos = graphviz_layout(G,
                       prog="dot",  # sfdp, neato, fdp - sparse, dot-normal,
 # gvcolor, osage, unflatten, dot, neato, acyclic, gvpr, ccomps, sfdp, gc, circo, patchwork, twopi, sccmap, fdp, nop, tred.
                       root=None,
+                      # args='-Gnodesep="0.2" -Gsplines=true'
                       # args='-Gsplines=true -Gnodesep=0.6 -Goverlap=scalexy'
                       )
 
@@ -75,9 +93,20 @@ for node in G.nodes:
 edge_x = []
 edge_y = []
 edge_text = []
+count = 0
 for edge in G.edges():
-    x0, y0 = G.nodes[edge[0]]['pos']
-    x1, y1 = G.nodes[edge[1]]['pos']
+    if edge in arrows:
+        count += 1
+        print(count, edge)
+        pair = edge_processed(edge) # Генератор правильных рёбер из one-type action (действия с одним входом и выходом)
+        try:
+            x0, y0 = G.nodes[pair[0]]['pos']
+            x1, y1 = G.nodes[pair[1]]['pos']
+        except KeyError:
+            continue
+    else:
+        x0, y0 = G.nodes[edge[0]]['pos']
+        x1, y1 = G.nodes[edge[1]]['pos']
     edge_x.append(x0)
     edge_x.append(x1)
     edge_x.append(None)
@@ -98,6 +127,7 @@ node_y = []
 colors = []
 sizes = []
 node_text = []
+
 for node in G.nodes(data=True):
     code = node[0]
     node = node[1]
@@ -200,8 +230,8 @@ for x, y in zip(edge_x, edge_y):
             showarrow=True,
             arrowhead=3,
             arrowsize=1,
-            arrowwidth=1,
-            arrowcolor='black'
+            arrowwidth=0.5,
+            arrowcolor='grey'
         )
         arrow_list.append(arrow)
 
