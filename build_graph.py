@@ -13,6 +13,7 @@ from itertools import chain
 import sys
 from networkx.drawing.nx_agraph import graphviz_layout
 import textwrap
+from statistics import mean
 from dash.dependencies import Input, Output
 from dash.exceptions import PreventUpdate
 import json
@@ -49,9 +50,15 @@ one_action = actions_df[cond1 & cond2].copy()
 arrows = list(zip(one_action.ins, one_action.name)) + list(zip(one_action.name, one_action.outs))
 actions = list(zip(zip(one_action.ins, one_action.name), zip(one_action.name, one_action.outs)))
 
-def edge_processed(x: tuple, actions: list=actions) -> tuple:
+def one_action_processed(x: tuple, actions: list=actions, returned: str='edge') -> tuple:
     elem = [i for i in actions if i[0] == x or i[1] == x][0]
-    return elem[0][0], elem[1][1]
+    if returned == 'edge':
+        return elem[0][0], elem[1][1]
+    elif returned == 'node':
+        assert elem[0][1] == elem[1][0], 'Non-transitional action'
+        return elem[0][1]
+    else:
+        pass
 
 data_df = pd.read_excel(data_file_name)
 data_df.rename(columns={"Код": "name"}, inplace=True)
@@ -93,15 +100,18 @@ for node in G.nodes:
 edge_x = []
 edge_y = []
 edge_text = []
+one_action_node = {} # transitional node to move at the center of merged arrow
 count = 0
 for edge in G.edges():
     if edge in arrows:
         count += 1
-        print(count, edge)
-        pair = edge_processed(edge) # Генератор правильных рёбер из one-type action (действия с одним входом и выходом)
+        # print(count, edge)
+        pair = one_action_processed(edge) # Генератор правильных рёбер из one-type action (действия с одним входом и выходом)
         try:
             x0, y0 = G.nodes[pair[0]]['pos']
             x1, y1 = G.nodes[pair[1]]['pos']
+            x_avg, y_avg = mean([x0, x1]), mean([y0, y1])
+            one_action_node[one_action_processed(edge, returned='node')] = (x_avg, y_avg)
         except KeyError:
             continue
     else:
@@ -127,14 +137,27 @@ node_y = []
 colors = []
 sizes = []
 node_text = []
+borders = {}
+borders['color'] = []
+borders['width'] = []
+codes = []
+symbols = []
+
+symbols_dict = {'CGM': 'circle', 'KGM':  'square', 'GDM': 'hexagon', 'PFM': 'star', 'SGM': 'hexagram'}
 
 for node in G.nodes(data=True):
     code = node[0]
     node = node[1]
     x, y = node['pos']
-    node_x.append(x)
-    node_y.append(y)
     text = ''
+    text += f'<b>Код:</b> {code}<br>'
+    border_color = 'rgba(217,191,219,0)'
+    border_width = 1
+    try:
+        model = node['MAIN MODEL']
+    except KeyError:
+        model = node['Код модели']
+    symbols.append(symbols_dict[model])
     if 'Текст ветвления' in node:                   # ------ Ветвление
         colors.append('#bb00c7')  # Фиолетовый
         sizes.append(15)
@@ -144,8 +167,16 @@ for node in G.nodes(data=True):
         sizes.append(30)
         text += node['текст выбора метода']
     elif 'ins' in node:                             # ------ Гиперребро (действие)
-        colors.append('#c8c8c8')  # Серый
+
+        if code in one_action_node.keys():
+            x, y = one_action_node[code]
+        else:
+            pass
+
+        colors.append('rgba(217,191,219,0)')  # Прозрачный
         sizes.append(5)
+        border_color = 'plum'
+        border_width = 2
         text += f"<b>{node['текст действия']}</b>"
         if not pd.isna(node['Уровень автоматизации и развитости технологий автоматизации (автоматическое, автоматизированное, ручное)']):
             text += f"<br>Действие: <i>{node['Уровень автоматизации и развитости технологий автоматизации (автоматическое, автоматизированное, ручное)']}</i>"
@@ -172,14 +203,24 @@ for node in G.nodes(data=True):
             text += f"<br>Формат: <i>{node['Формат данных (например, .SEG-Y, .png)']}</i>"
         if not pd.isna(node['Возможные аномалии (в свободном формате)']):
             text += f"<br>Возможные аномалии: <i>{node['Возможные аномалии (в свободном формате)']}</i>"
-    node_text.append('<br>'.join(textwrap.wrap(text)))
 
+    node_x.append(x)
+    node_y.append(y)
+    node_text.append('<br>'.join(textwrap.wrap(text)))
+    borders['color'].append(border_color)
+    borders['width'].append(border_width)
+    codes.append(code)
 
 node_trace = go.Scatter(
     x=node_x, y=node_y,
     mode='markers',
     hoverinfo='text',
-    # marker=dict(
+#     marker=dict(
+#                 line=dict(
+#                    color='plum',
+#                     width=2
+#                 )
+#     )
         # showscale=True,
         # colorscale options
         #'Greys' | 'YlGnBu' | 'Greens' | 'YlOrRd' | 'Bluered' | 'RdBu' |
@@ -198,9 +239,13 @@ node_trace = go.Scatter(
         # line_width=2)
 )
 
+
+node_trace.marker.symbol = symbols
 node_trace.marker.color = colors
+node_trace.marker.line = borders
 node_trace.text = node_text
 node_trace.marker.size = sizes
+
 
 # Adding arrows
 i = -1
@@ -247,6 +292,10 @@ fig = go.Figure(
         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
     )
 )
+
+# for x, y, code in zip(node_x, node_y, codes):
+#     fig.add_annotation(x=x, y=y, text=code)
+
 fig.update_layout(annotations=arrow_list)
 fig.update_yaxes(
     scaleanchor="x",
@@ -304,5 +353,3 @@ app.layout = html.Div(
     style={'height': '100vh'}
 )
 app.run_server(debug=True, use_reloader=False)
-# fig.show()
-
