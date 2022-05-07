@@ -1,24 +1,8 @@
-import pandas as pd
 from NXGraph import NXGraph
-import numpy as np
-import networkx as nx
-import scipy
-
+from resources.utils import *
 import dash
 from dash import Dash, dcc, html, Input, Output
-import plotly.graph_objects as go
-import matplotlib.pyplot as plt
-import math
-from typing import List, Dict, Tuple, Any
-from itertools import chain
-import sys
-from networkx.drawing.nx_agraph import graphviz_layout
-import textwrap
-from statistics import mean
-from dash.dependencies import Input, Output
-from dash.exceptions import PreventUpdate
-import json
-import collections
+import argparse
 
 # Model name if needed
 # -----------------------------
@@ -51,18 +35,6 @@ one_action = actions_df[cond1 & cond2].copy()
 arrows = list(zip(one_action.ins, one_action.name)) + list(zip(one_action.name, one_action.outs))
 actions = list(zip(zip(one_action.ins, one_action.name), zip(one_action.name, one_action.outs)))
 
-
-def one_action_processed(x: tuple, actions: list = actions, returned: str = 'edge') -> tuple:
-    elem = [i for i in actions if i[0] == x or i[1] == x][0]
-    if returned == 'edge':
-        return elem[0][0], elem[1][1]
-    elif returned == 'node':
-        assert elem[0][1] == elem[1][0], 'Non-transitional action'
-        return elem[0][1]
-    else:
-        pass
-
-
 data_df = pd.read_excel(data_file_name)
 data_df.rename(columns={"Код": "name"}, inplace=True)
 branchings_df = pd.read_excel(branching_name)
@@ -84,298 +56,56 @@ my_graph.build_structure(
     inspect=True, model=model
 )
 
+node_feature_weight = ['Времязатраты (1-10)', 'Сложность задачи (1-10)']
+weight_feature = ['time_exp', 'comp_exp']
+columns_feature = dict(zip(node_feature_weight, weight_feature))
+
+# initializing & filtering from empty nodes
 G = my_graph
+filter_graph(G)
+# add weight data to edges
+add_edge_weight(G, columns_feature)
+# rest of edges w/o any assigned weights
+empty_edges = [e for e in G.edges() if len(G[e[0]][e[1]]) != 2]  # 2 weights
+for e in empty_edges:
+    for weight in weight_feature:
+        G[e[0]][e[1]][weight] = 0
 
-# filtering from autonomous nodes
-in_ = dict(G.in_degree)
-out = dict(G.out_degree)
-degrees = [in_, out]
-counter = collections.Counter()
-for i in degrees:
-    counter.update(i)
-empty = dict((k, v) for k, v in counter.items() if v == 0)
-for i in empty.keys():
-    G.remove_node(i)
-    print(f'Empty node {i}: no in & out degrees')
+LAYOUT = 'graphviz_dot'
+# selecting layout and source & target (put in interface)
+G = select_layout(G, LAYOUT)
 
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Plot graph knowledge & pathway depends on weights')
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('-g', '--graph', action='store_true', help='Launch and show the whole graph')
+    group.add_argument(
+        '-p',
+        '--path',
+        nargs=3,
+        metavar=("source", "target", "weight"),
+        type=str,
+        help='Plot pathway between source and target nodes'
+    )
+    args = parser.parse_args()
+    if args.graph:
+        SOURCE, TARGET, WEIGHT = None, None, None
+    elif args.path:
+        SOURCE, TARGET, WEIGHT = args.path[0], args.path[1], args.path[2]
+    else:
+        pass
 
-# test (edges highlight)
-a = nx.shortest_path(G, 'S03', 'CGM|D15')
-pathway = list(zip(a, a[1:]))
+    app = dash.Dash()
+    app.title = 'Graph knowledge'
 
-data_path = []
-for el in a:
-    d = G.nodes[el]
-    data_path.append(d)
+    graph = dcc.Graph(id='GDM',
+                      figure=plot(G, SOURCE, TARGET, WEIGHT),
+                      responsive=True,
+                      style={'height': '100vh'})
 
-pd.DataFrame(data_path, index=list(range(len(data_path)))).to_csv('test2.csv', index=False)
-
-# Get nodes coordinates
-    # if pos == 'spring':
-    #     pos = nx.spring_layout(G)
-    # elif pos == 'graphviz_dot':
-pos = graphviz_layout(G, prog='dot', root=None)
-    # else:
-    #     return 'Unknown layout'
-
-# Node coordinates to graph (in 'pos' argument of a node)
-for node in G.nodes:
-    G.nodes[node]['pos'] = tuple(pos[node])
-
-# Building edges  (на их основе - annotations в виде стрелок)
-def build_edge(edges):
-    edge_x = []
-    edge_y = []
-    for edge in edges:
-        x0, y0 = G.nodes[edge[0]]['pos']
-        x1, y1 = G.nodes[edge[1]]['pos']
-        edge_x.append(x0)
-        edge_x.append(x1)
-        edge_x.append(None)
-        edge_y.append(y0)
-        edge_y.append(y1)
-        edge_y.append(None)
-
-    return edge_x, edge_y
-# Adding arrows
-def edge_to_arrow(edge_x, edge_y, size, width, color):
-    i = -1
-    arrow_list = []
-    xs = []
-    ys = []
-    for x, y in zip(edge_x, edge_y):
-        i += 1
-        if i == 2:
-            i = -1
-            xs = []
-            ys = []
-            continue
-        xs.append(x)
-        ys.append(y)
-        if i == 1:
-            arrow = dict(
-                x=xs[1],  # arrows' head      Почему-то координаты наоборот
-                y=ys[1],  # arrows' head
-                ax=xs[0],  # arrows' tail
-                ay=ys[0],  # arrows' tail
-                xref='x',
-                yref='y',
-                axref='x',
-                ayref='y',
-                text='',  # if you want only the arrow
-                showarrow=True,
-                arrowhead=3,
-                arrowsize=size,
-                arrowwidth=width,
-                arrowcolor=color
-            )
-            arrow_list.append(arrow)
-    return arrow_list
-
-G_copy = G.copy() # copy of initial graph
-
-G.remove_edges_from(pathway)
-edge_x, edge_y = build_edge(G.edges())
-arrow_list = edge_to_arrow(edge_x, edge_y, 1, 0.5, 'grey')
-edge_x_path, edge_y_path = build_edge(pathway)
-pathway_list = edge_to_arrow(edge_x_path, edge_y_path, 1, 1.5, '#432E36')
-
-сolors_dict = {'CGM': '#EF476F', 'KGM': '#E09D00', 'GDM': '#06D6A0', 'PFM': '#118AB2', 'SGM': '#031D25'}
-
-# Customizing nodes
-def custom_edges(nodes, сolors_dict, nodes_from_path=None):
-    node_x = []
-    node_y = []
-    colors = []
-    sizes = []
-    node_text = []
-    borders = {}
-    borders['color'] = []
-    borders['width'] = []
-    codes = []
-    symbols = []
-    opacities = []
-
-    for node in nodes:
-        code = node[0]
-        node = node[1]
-        x, y = node['pos']
-        text = ''
-        text += f'<b>Код:</b> {code}<br>'
-        border_color = '#f0ffff' # azure
-        border_width = 1.5
-        try:
-            model = node['MAIN MODEL']
-        except KeyError:
-            model = node['Код модели']
-
-        # if nodes_from_path:
-        #     if code in nodes_from_path:
-        #         color_default = сolors_dict[model]
-        #     else:
-        #         color_default = 'grey'
-        # else:
-        #     color_default = сolors_dict[model]
-
-        color_default = сolors_dict[model]
-
-        if nodes_from_path:
-            if code in nodes_from_path:
-                opacity = 1.0
-            else:
-                opacity = 0.3
-        else:
-            opacity = 1.0
-
-        if 'Текст ветвления' in node:  # ------ Ветвление
-            sizes.append(14)
-            symbols.append('triangle-up')
-            colors.append(color_default)
-            text += node['Текст ветвления']
-        elif 'текст выбора метода' in node:  # ------ Блок выбора действий
-            sizes.append(25)
-            symbols.append('diamond')
-            colors.append(color_default)
-            text += node['текст выбора метода']
-        elif 'ins' in node:  # ------ Гиперребро (действие)
-            # if code in one_action_node.keys():
-            #     x, y = one_action_node[code]
-            # else:
-            #     pass
-            sizes.append(5)
-            symbols.append('circle')
-            colors.append('#f0ffff')  # Прозрачный
-            text += f"<b>{node['текст действия']}</b>"
-            border_color = '#44355B'
-            border_width = 2
-            if not pd.isna(node[
-                               'Уровень автоматизации и развитости технологий автоматизации (автоматическое, автоматизированное, ручное)']):
-                text += f"<br>Действие: <i>{node['Уровень автоматизации и развитости технологий автоматизации (автоматическое, автоматизированное, ручное)']}</i>"
-            if not pd.isna(
-                    node['проекты компании направленные на развитие автоматизации методологии (в свободной форме)']):
-                text += f"<br>Проекты: <i>{node['проекты компании направленные на развитие автоматизации методологии (в свободной форме)']}</i>"
-        else:  # ------ Данные либо ветвление
-            sizes.append(14)
-            if node['Тип данных'] == 'Исходные':
-                symbols.append('circle-x')  # Круг с крестиком
-            elif node['Тип данных'] == 'Промежуточные':
-                symbols.append('star-triangle-up')  # Синий
-            elif node['Тип данных'] == 'Ветвление':
-                symbols.append('triangle-up') # Треугольник
-            elif node['Тип данных'] == 'Выходные':
-                symbols.append('circle-dot')  # Кружок с точкой
-            else:
-                raise AttributeError("Неизвестный тип данных ноды " + code)
-            colors.append(color_default)
-            parameter = node['Параметр']
-            descriprion = node['Описание ']
-            text += f"Параметр: <b>{parameter}</b>"
-            if parameter != descriprion and not pd.isna(descriprion):
-                text += f"<br>Описание: <i>{descriprion}</i>"
-            if not pd.isna(node['Формат данных (например, .SEG-Y, .png)']):
-                text += f"<br>Формат: <i>{node['Формат данных (например, .SEG-Y, .png)']}</i>"
-            if not pd.isna(node['Возможные аномалии (в свободном формате)']):
-                text += f"<br>Возможные аномалии: <i>{node['Возможные аномалии (в свободном формате)']}</i>"
-
-        node_x.append(x)
-        node_y.append(y)
-        node_text.append('<br>'.join(textwrap.wrap(text)))
-        borders['color'].append(border_color)
-        borders['width'].append(border_width)
-        codes.append(code)
-        opacities.append(opacity)
-
-    node_trace = go.Scatter(
-        x=node_x, y=node_y,
-        mode='markers',
-        hoverinfo='text'
+    app.layout = html.Div(
+        children=[graph],
+        style={'height': '100vh'}
     )
 
-    node_trace.marker.opacity = opacities
-    node_trace.marker.symbol = symbols
-    node_trace.marker.color = colors
-    node_trace.marker.line = borders
-    node_trace.text = node_text
-    node_trace.marker.size = sizes
-
-    return node_trace
-
-# G.remove_nodes_from(a)
-node_trace = custom_edges(G.nodes(data=True), сolors_dict, nodes_from_path=a)
-
-edge_trace = go.Scatter(
-    x=edge_x, y=edge_y,
-    line=dict(width=0.5, color='#888'),
-    hoverinfo='text',
-    mode='lines')
-
-fig = go.Figure(
-    data=[node_trace],
-    layout=go.Layout(
-        title=None,
-        titlefont_size=16,
-        showlegend=False,
-        hovermode='closest',
-        margin=dict(b=20, l=5, r=5, t=20),
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-    )
-)
-
-# for x, y, code in zip(node_x, node_y, codes):
-#     fig.add_annotation(x=x, y=y, text=code)
-
-
-arrow_list = arrow_list + pathway_list
-fig.update_layout(annotations=arrow_list)
-# fig.update_layout(annotations=pathway_list)
-fig.update_yaxes(
-    scaleanchor="x",
-    scaleratio=1
-)
-
-
-app = dash.Dash()
-app.title = 'Graph knowledge'
-#
-# app.layout = html.Div([
-#
-#     dcc.Dropdown(id='dropdown', options=[
-#         {'label': 'spring', 'value': 'spring'},
-#         {'label': 'graphviz_dot', 'value': 'graphviz_dot'}],
-#                  value='spring'),
-#
-#     dcc.Graph(id='graph-network',
-#               style={'height': '100vh'}
-#               )
-#
-# ])
-#
-#
-# @app.callback(
-#     Output('graph-network', 'figure'),
-#     [Input('dropdown', 'value')],
-# )
-# def update_output(pos):
-#     if pos == 'spring':
-#         pos = nx.spring_layout(G)
-#     elif pos == 'graphviz_dot':
-#         pos = graphviz_layout(G, prog='dot', root=None)
-#     else:
-#         return 'Unknown layout'
-#     return network_graph(pos)
-#
-# app.run_server(debug=True, use_reloader=False)
-
-
-graph = dcc.Graph(id='GDM',
-                  figure=fig,
-                  responsive=True,
-                  style={'height': '100vh'})
-# graph.figure = {"data": graph.figure.data, 'layout': {'height': '100vh'}}
-app.layout = html.Div(
-    children=[graph],
-    style={'height': '100vh'}
-)
-
-app.run_server(debug=True, use_reloader=False)
+    app.run_server(host="127.0.0.1", port="8051", debug=True, use_reloader=False)
