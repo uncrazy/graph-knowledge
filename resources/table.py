@@ -1,5 +1,6 @@
 import pandas as pd
 
+
 def preprocess_pathway(df):
     df1 = df[['Код модели', 'Код подмодели', 'Ветка', 'Тип данных', 'Категория',
               'Параметр', 'Описание ', 'name',

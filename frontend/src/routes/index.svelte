@@ -58,24 +58,22 @@
 
 	<svelte:fragment slot="right">
 		<div class="logic">
-			<h3 class="text-center my-8">Исходные данные</h3>
-            <div class="py-4 grid gap-4 md:grid-cols-2 grid-cols-1">
+			<h3 class="text-center">Исходные данные</h3>
+            <div class="py-4 grid gap-4 grid-cols-1">
                 {#each $inputChosens as nodeData}
                     <PokemanCard nodeData={nodeData}/>
                 {/each}
             </div>
 
-            <h3 class="text-center my-8">Необходимый результат</h3>
-            <div class="py-4 grid gap-4 md:grid-cols-2 grid-cols-1">
+            <h3 class="text-center">Необходимый результат</h3>
+            <div class="py-4 grid gap-4 grid-cols-1">
                 {#each $outputChosens as nodeData}
                     <PokemanCard nodeData={nodeData}/>
                 {/each}
             </div>
 
-            <h1 class="text-4xl text-center my-8 uppercase">SvelteKit Pokedex</h1>
-            <input class="w-full rounded-md text-lg p-4 border-2 border-gray-200" bind:value={searchTerm} placeholder="Search string">
-            <div class="py-4 grid gap-4 md:grid-cols-2 grid-cols-1">
-
+            <input class="w-full rounded-md text-sm p-4 border-2 border-gray-200" bind:value={searchTerm} placeholder="Поиск по ключевым словам">
+            <div class="py-4 grid gap-4 grid-cols-1">
                 {#each filteredPokemon as nodeData}
                         <PokemanCard nodeData={nodeData}/>
                 {/each}

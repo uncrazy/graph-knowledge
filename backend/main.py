@@ -2,16 +2,28 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from backend.build_graph import G
+from backend.graph_actions import get_graph
 
 
+rename_keys = {
+    "Описание ": "Description"
+}
+
+G = get_graph()
 nodes_data = {}
 nodes_data_arr = []
 for node in G.nodes(data=True):
     node_data = node[1]
-    nodes_data_arr.append(node_data)
+    if 'MODEL' in node_data.keys() or 'Тип данных' not in node_data.keys():
+        continue
+    search_str = " ".join(str(el) for el in node_data.values())
+    temp = node_data.copy()
+    temp.update({'searchStr': search_str})
+    for k, v in rename_keys.items():
+        temp[v] = temp.pop(k)  # Renaming keys
+    nodes_data_arr.append(temp)
     nodes_data[node_data['name']] = node_data
-
+#%%
 
 app = FastAPI()
 origins = [

@@ -1,4 +1,4 @@
-from NXGraph import NXGraph
+from backend.NXGraph import NXGraph
 from resources.utils import *
 import dash
 from dash import Dash, dcc, html, Input, Output
@@ -108,4 +108,4 @@ if __name__ == '__main__':
         style={'height': '100vh'}
     )
 
-    app.run_server(host="127.0.0.1", port="8051", debug=True, use_reloader=False)
+    app.run_server(host="127.0.0.1", port="8050", debug=True, use_reloader=False)

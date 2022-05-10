@@ -12,7 +12,10 @@ from .table import preprocess_pathway
 сolors_dict = {'CGM': '#EF476F', 'KGM': '#E09D00', 'GDM': '#06D6A0', 'PFM': '#118AB2', 'SGM': '#031D25'}
 # --------------------
 
-def one_action_processed(x: tuple, actions: list, returned: str = 'edge') -> tuple:
+
+def one_action_processed(x: tuple,
+                         actions: list,
+                         returned: str = 'edge') -> tuple:
     elem = [i for i in actions if i[0] == x or i[1] == x][0]
     if returned == 'edge':
         return elem[0][0], elem[1][1]
