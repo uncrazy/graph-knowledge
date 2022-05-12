@@ -1,29 +1,27 @@
 <script>
-    import { writable } from 'svelte/store';
+    import { writable, get } from 'svelte/store';
     import PokemanCard from "../components/pokemanCard.svelte";
+
     import {pokemon, fetchPokemon} from "../pokestore";
-    import {inputChosens} from '../pokestore';
-    import {outputChosens} from '../pokestore';
-    import {config} from '../pokestore';
+    import {inputChosens, outputChosens, config} from '../pokestore';
     import SplitPane from '../components/SplitPane.svelte'
 
 
     let searchTerm = "";
     let filteredPokemon = [];
-    let inputChosen = [];
-    let outputChosen = [];
 
     $: {
         if(searchTerm) {
             filteredPokemon = $pokemon.filter(
-                // nodeData => nodeData.name.toLowerCase().includes(searchTerm.toLowerCase())
-                el => {
-                    let str = "";
-                    Object.values(el).map(s => str += s ? s.toString() : "");
-                    console.log(searchTerm.toLowerCase() + str);
-                    // return str.indexOf(searchTerm.toString().toLowerCase()) != -1;
-                    return str.includes(searchTerm.toLowerCase());
-                });
+                el => el['searchStr'].toLowerCase().includes(searchTerm.toLowerCase())
+            );
+                // el => {
+                //     let str = "";
+                //     Object.values(el).map(s => str += s ? s.toString() : "");
+                //     console.log(searchTerm.toLowerCase() + str);
+                //     // return str.indexOf(searchTerm.toString().toLowerCase()) != -1;
+                //     return str.includes(searchTerm.toLowerCase());
+                // });
         }
         else {
             filteredPokemon = [...$pokemon];
@@ -37,8 +35,16 @@
     const onMouseUp = () => {
         classPointerEventsNone = '';
     }
-
-
+    const findPath = (inIds, outIds, metric) => {
+        document.getElementById('graphFrame').contentWindow.postMessage(
+            {
+                "inIds": inIds,
+                "outIds": outIds,
+                "metric": metric
+            },
+                "*"
+        );
+    }
     fetchPokemon();
 </script>
 
@@ -47,11 +53,10 @@
 	<title>Pokedex</title>
 </svelte:head>
 
-
 <SplitPane leftInitialSize="75%">
 
 	<svelte:fragment slot="left">
-        <iframe class="graph" src="{config['graphInstanceUrl']}">
+        <iframe title="graph" name="frame" id="graphFrame" class="graph" src="{config['graphInstanceUrl']}">
         </iframe>
 
 	</svelte:fragment>
@@ -61,21 +66,25 @@
 			<h3 class="text-center">Исходные данные</h3>
             <div class="py-4 grid gap-4 grid-cols-1">
                 {#each $inputChosens as nodeData}
-                    <PokemanCard nodeData={nodeData}/>
+                    <PokemanCard nodeData={nodeData} toDelete={true} arr="inputChosens" />
                 {/each}
             </div>
 
             <h3 class="text-center">Необходимый результат</h3>
             <div class="py-4 grid gap-4 grid-cols-1">
                 {#each $outputChosens as nodeData}
-                    <PokemanCard nodeData={nodeData}/>
+                    <PokemanCard nodeData={nodeData} toDelete={true} arr="outputChosens" />
                 {/each}
             </div>
 
-            <input class="w-full rounded-md text-sm p-4 border-2 border-gray-200" bind:value={searchTerm} placeholder="Поиск по ключевым словам">
+            <button on:click={() => findPath(get(inputChosens), get(outputChosens), "time_exp")} type="button" class="px-3 py-2 text-xs font-medium text-center text-white bg-blue-700 rounded-lg hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">
+                Найти путь
+            </button>
+
+            <input class="w-full rounded-md text-sm p-4 m-4 border-2 border-gray-200" bind:value={searchTerm} placeholder="Поиск по ключевым словам">
             <div class="py-4 grid gap-4 grid-cols-1">
                 {#each filteredPokemon as nodeData}
-                        <PokemanCard nodeData={nodeData}/>
+                    <PokemanCard nodeData={nodeData} toDelete={false} />
                 {/each}
             </div>
 		</div>
