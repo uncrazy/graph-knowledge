@@ -15,11 +15,11 @@ def create_dash_app(G, requests_pathname_prefix: str = None) -> dash.Dash:
     graph = dcc.Graph(id='GDM',
                       figure=plot(G),
                       responsive=True,
-                      style={'height': '90vh'})
-    button = html.Button('Make api call', id='button', hidden=True)#, inIDs=[], outIds=[])
-    input_inIds = dcc.Input(id='inIds', type='hidden')
-    input_outIds = dcc.Input(id='outIds', type='hidden')
-    input_metric = dcc.Input(id='metric', type='hidden')
+                      style={'height': '100vh'})
+    button = html.Button('Make api call', id='button')#, hidden=True)#, inIDs=[], outIds=[])
+    input_inIds = dcc.Input(id='inIds')#, type='hidden')
+    input_outIds = dcc.Input(id='outIds')#, type='hidden')
+    input_metric = dcc.Input(id='metric')#, type='hidden')
 
     dash_app.layout = html.Div(
         children=[graph, button, input_inIds, input_outIds, input_metric],
@@ -45,17 +45,12 @@ def create_dash_app(G, requests_pathname_prefix: str = None) -> dash.Dash:
     #                             #        State('metric', 'value')]
     #                             )
 
-
     @dash_app.callback(Output('GDM', 'figure'),
-                       [Input("button", "n_clicks"),
-                        Input('inIds', 'value'),
-                        Input('outIds', 'value'),
-                        Input('metric', 'value'),
-                        ],
+                        Input("button", "n_clicks"),
+                        State('inIds', 'value'),
+                        State('outIds', 'value'),
+                        State('metric', 'value'),
                        prevent_initial_call=True
-                       # state=[State('inIds', 'value'),
-                       #        State('outIds', 'value'),
-                       #        State('metric', 'value')]
                        )
     def update_data(nclicks, inIds, outIds, metric):
         """Retrieves data from api call

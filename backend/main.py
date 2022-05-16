@@ -68,6 +68,7 @@ def get_data():
 
 # Place After All Other Routes
 app.mount("/dash", WSGIMiddleware(dash_app.server))
+app.mount("/images", StaticFiles(directory="frontend/images"), name="images")
 app.mount("", StaticFiles(directory="frontend/public", html=True), name="build")
 
 
