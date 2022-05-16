@@ -1,18 +1,26 @@
+from dash import Dash, dcc, html, callback_context, callback
+from dash.dependencies import Input, Output, State
+import dash_bootstrap_components as dbc
+import argparse
+import sys
+from os import path
+
+from dash.exceptions import PreventUpdate
+
+rpath = '../'
+sys.path.insert(0, rpath)
 from backend.NXGraph import NXGraph
 from resources.utils import *
-import dash
-from dash import Dash, dcc, html, Input, Output
-import argparse
 
 # Model name if needed
 # -----------------------------
 model = None
 # -----------------------------
 
-actions_file_name = "data/actions_reestr_graph.xlsx"
-data_file_name = "data/data_model_graph.xlsx"
-branching_name = "data/vetvleniq_graph.xlsx"
-method_selection_block_name = "data/method_selection_blocks.xlsx"
+actions_file_name = path.join(rpath, "data/actions_reestr_graph.xlsx")
+data_file_name = path.join(rpath, "data/data_model_graph.xlsx")
+branching_name = path.join(rpath, "data/vetvleniq_graph.xlsx")
+method_selection_block_name = path.join(rpath, "data/method_selection_blocks.xlsx")
 
 metric_types = ["intensive"]
 n_metrics = len(metric_types)
@@ -75,37 +83,290 @@ LAYOUT = 'graphviz_dot'
 # selecting layout and source & target (put in interface)
 G = select_layout(G, LAYOUT)
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Plot graph knowledge & pathway depends on weights')
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('-g', '--graph', action='store_true', help='Launch and show the whole graph')
-    group.add_argument(
-        '-p',
-        '--path',
-        nargs=3,
-        metavar=("source", "target", "weight"),
-        type=str,
-        help='Plot pathway between source and target nodes'
-    )
-    args = parser.parse_args()
-    if args.graph:
-        SOURCE, TARGET, WEIGHT = None, None, None
-    elif args.path:
-        SOURCE, TARGET, WEIGHT = args.path[0], args.path[1], args.path[2]
+# parser = argparse.ArgumentParser(description='Plot graph knowledge & pathway depends on weights')
+# group = parser.add_mutually_exclusive_group(required=True)
+# group.add_argument('-g', '--graph', action='store_true', help='Launch and show the whole graph')
+# group.add_argument(
+#     '-p',
+#     '--path',
+#     nargs=3,
+#     metavar=("source", "target", "weight"),
+#     type=str,
+#     help='Plot pathway between source and target nodes'
+# )
+# args = parser.parse_args()
+# if args.graph:
+#     SOURCE, TARGET, WEIGHT = None, None, None
+# elif args.path:
+#     SOURCE, TARGET, WEIGHT = args.path[0], args.path[1], args.path[2]
+# else:
+#     pass
+
+
+nodes = ["S03", 'CGM|D15', 'CGM|D16']
+
+# external_stylesheets = [
+#     dbc.themes.FLATLY,
+#     {
+#      'button':   'https://codepen.io/chriddyp/pen/bWLwgP.css',
+#       'input':   'https://codepen.io/chriddyp/pen/bWLwgP.css'
+#     }
+# ]
+
+app = Dash(
+    __name__,
+    external_stylesheets=[dbc.themes.FLATLY]
+    # external_stylesheets=external_stylesheets
+        )
+app.title = 'Graph knowledge'
+
+SOURCE, TARGET, WEIGHT = None, None, None
+
+# the style arguments for the sidebar. We use position:fixed and a fixed width
+SIDEBAR_STYLE = {
+    "position": "fixed",
+    "top": 0,
+    "left": 0,
+    "bottom": 0,
+    "width": "28rem",
+    "padding": "2rem 2rem 1rem 2rem",
+    "background-color": "#f8f9fa",
+}
+
+# the styles for the main content position it to the right of the sidebar and
+# add some padding.
+CONTENT_STYLE = {
+    "margin-left": "29rem",
+    "margin-right": "2rem",
+    "padding": "2rem 1rem",
+    "height": "100vh"
+}
+
+sidebar = html.Div(
+    [
+        html.H1("Graph knowledge", className="display-6"),
+        html.Hr(),
+        html.P(
+            "Find the optimum path from source to target node", className="text"
+        ),
+        dcc.Dropdown(
+            id='source_node',
+            placeholder='Select the source ...',
+            options=[
+                {'label': k, 'value': k} for k in nodes
+            ],
+            style={
+                'font-size': '16px',
+                 'width': '24rem',
+                 'display': 'inline-block',
+                 'margin-bottom': '5px'
+            },
+        ),
+        dcc.Dropdown(
+            id='target_node',
+            placeholder='Select the target ...',
+            options=[
+                {'label': k, 'value': k} for k in nodes
+            ],
+            style={
+                'font-size': '16px',
+                 'width': '24rem',
+                 'display': 'inline-block',
+                 'margin-bottom': '8px'
+            },
+        ),
+        html.P(
+            "Select weight feature for edges:", className="text"
+        ),
+        html.Div([
+            dbc.RadioItems(
+                id="weight",
+                value='time_exp',
+                className="btn-group",
+                inputClassName="btn-check",
+                labelClassName="btn btn-outline-primary",
+                labelCheckedClassName="active",
+                options=[
+                    {'label': k, 'value': v} for k, v in columns_feature.items()
+                ],
+                style={
+                        'width': '24rem'
+                },
+            ),
+        ],
+            className="radio-group"
+        ),
+        html.Hr(),
+        html.Div(
+            [
+                dbc.Button(
+                    id='submit-button-state',
+                    outline=True,
+                    color="success",
+                    className="me-1",
+                    n_clicks=0,
+                    children='Submit',
+                    style={
+                        'margin-right': '5px',
+                    },
+                ),
+                dbc.Button(
+                    id='reset-button-state',
+                    outline=True,
+                    color="danger",
+                    className="me-1",
+                    n_clicks=0,
+                    children='Reset',
+                    disabled=True,
+                    style={
+                        'margin-right': '5px',
+                    },
+                ),
+
+            ],
+            className='d-grid gap-2 col-9 mx-auto'
+        ),
+        html.Hr(),
+        html.Div(
+            [
+            dbc.Button(
+                id='xml-button',
+                color='info',
+                children='Convert to XML',
+                disabled=True,
+                style={
+                    'margin-right': '16px',
+                }
+            ),
+            dbc.Button(
+                id='gantt-chart-button',
+                color='info',
+                children='Gantt chart',
+                disabled=True,
+            )
+            ],
+            style={'textAlign': 'center', 'margin': 'auto'}
+        ),
+    ],
+    style=SIDEBAR_STYLE,
+)
+
+content = dcc.Graph(
+    id='GDM',
+    figure=plot(G, SOURCE, TARGET, WEIGHT),
+    responsive=True,
+    style=CONTENT_STYLE
+)
+
+app.layout = html.Div([sidebar, content])
+
+# app.layout = html.Div([
+#     html.Div([
+#         html.Div([
+#         dcc.Dropdown(id='source_node',
+#                      placeholder='Select the source ...',
+#                      options=[
+#                          {'label': k, 'value': k} for k in nodes
+#                      ],
+#                      style={
+#                          'font-size': '16px',
+#                          'width': '280px',
+#                          'display': 'inline-block',
+#                          'margin-right': '15px'
+#                      }
+#                      ),
+#         dcc.Dropdown(id='target_node',
+#                      placeholder='Select the target ...',
+#                      options=[
+#                         {'label': k, 'value': k} for k in nodes
+#                      ],
+#                      style={
+#                       'font-size': '16px',
+#                       'width': '280px',
+#                       'display': 'inline-block',
+#                       'margin-right': '15px'
+#                      }
+#                      )
+#             ], style={'width': '25%', 'display': 'inline-block', 'margin-top': '20px', 'margin-bottom': '0px'}),
+#         html.Div([
+#         dbc.RadioItems(
+#             id="weight",
+#             className="btn-group",
+#             inputClassName="btn-check",
+#             labelClassName="btn btn-outline-primary",
+#             labelCheckedClassName="active",
+#             options=[
+#                 {'label': k, 'value': v} for k, v in columns_feature.items()
+#             ],
+#             # style={
+#             #         'display': 'inline-block'
+#             # },
+#             value='time_exp',
+#         ),
+#         # dcc.RadioItems(id='weight-selector',
+#         #                options=[{'label': k, 'value': v} for k, v in columns_feature.items()],
+#         #                inline=True,
+#         #                style={
+#         #                 'font-size': '16px',
+#         #                })
+#             ],
+#             className="radio-group",
+#             style={'width': '30%', 'display': 'inline-block', 'verticalAlign': 'center'}
+#         ),
+#         html.Div([
+#             html.Button(id='submit-button-state', n_clicks=0, children='Submit',
+#                         style={
+#                             'display': 'inline-block',
+#                             'margin-right': '5px',
+#                         }),
+#             html.Button(id='reset-button-state', n_clicks=0, children='Reset',
+#                         style={
+#                             'display': 'inline-block',
+#                             'margin-right': '5px'
+#                         }),
+#             ], style={'width': '25%', 'display': 'inline-block', 'verticalAlign': 'сenter'}),
+#     ], style={'display': 'flex', 'verticalAlign': 'center'}),
+#     dcc.Graph(id='GDM',
+#               figure=plot(G, SOURCE, TARGET, WEIGHT),
+#               responsive=True,
+#               style={'height': '95vh'})
+# ])
+
+
+# triggered_id = callback_context.triggered[0]['prop_id']
+
+@app.callback(
+    Output('GDM', 'figure'),
+    Output('reset-button-state', 'disabled'),
+    Output('xml-button', 'disabled'),
+    Output('gantt-chart-button', 'disabled'),
+    Input('submit-button-state', 'n_clicks'),
+    State('source_node', 'value'),
+    State('target_node', 'value')
+)
+def update_output(n_clicks, source, target):
+    if n_clicks in [0, None]:
+        raise PreventUpdate
     else:
-        pass
+        w = 'time_exp'
+        fig = plot(G, source, target, w)
+        return fig, False, False, False
 
-    app = dash.Dash()
-    app.title = 'Graph knowledge'
+# @app.callback(
+#     Output('GDM', 'figure'),
+#     Output('xml-button', 'disabled'),
+#     Output('gantt-chart-button', 'disabled'),
+#     Output('reset-button-state', 'disabled'),
+#     Input('reset-button-state', 'n_clicks'),
+# )
+# def reset_output(n_clicks):
+#     if n_clicks in [0, None]:
+#         raise PreventUpdate
+#     else:
+#         fig = plot(G, None, None, None)
+#         return fig, True, True, True
 
-    graph = dcc.Graph(id='GDM',
-                      figure=plot(G, SOURCE, TARGET, WEIGHT),
-                      responsive=True,
-                      style={'height': '100vh'})
 
-    app.layout = html.Div(
-        children=[graph],
-        style={'height': '100vh'}
-    )
 
+if __name__ == '__main__':
     app.run_server(host="127.0.0.1", port="8050", debug=True, use_reloader=False)

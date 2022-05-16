@@ -2,6 +2,12 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+
+import sys
+sys.path.append('./../')
+print(sys.path)
+
+
 from backend.graph_actions import get_graph
 
 
@@ -29,7 +35,7 @@ app = FastAPI()
 origins = [
     "http://localhost.tiangolo.com",
     "https://localhost.tiangolo.com",
-    "http://localhost:8000",
+        "http://localhost:8000",
     "http://localhost:3000",
 ]
 
@@ -109,4 +115,4 @@ def get_testdata():
 
 
 # Place After All Other Routes
-# app.mount('', StaticFiles(directory="frontend/public/", html=True), name="static")
+app.mount('', StaticFiles(directory="./../frontend/public/", html=True), name="static")
