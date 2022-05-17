@@ -1,4 +1,6 @@
 import collections
+import copy
+
 import networkx as nx
 import pandas as pd
 from networkx.drawing.nx_agraph import graphviz_layout
@@ -305,11 +307,24 @@ def draw_figure(node, arrow, pathway=None):
 
 
 # Final plot
-def plot(g, source=None, target=None, weight=None, сolors=сolors_dict):
+def plot(g, source=None, target=None, weight=None, сolors=сolors_dict, nodes_exceptions=None):
+    g = copy.deepcopy(g) # to avoid removing edges after second and following tries
+
+    # remove nodes and edges from the exceptions list
+    if not nodes_exceptions:
+        pass
+    else:
+        g.remove_nodes_from(nodes_exceptions)
+        edges_exceptions = [(start, end) for start, end in g.edges if start in nodes_exceptions]
+        g.remove_edges_from(edges_exceptions)
+
+    # classic layout - full graph
     if not (source and target and weight):
         edge_x, edge_y = build_edge(g, g.edges())
         arrow_list = edge_to_arrow(edge_x, edge_y, 2, 0.5, 'grey', 0.9)
         nodes_path, pathway_list = None, None
+
+    # pathway layout
     else:
         nodes_path, edges_path = pathway(g, source, target, weight)
         # preparing edges
@@ -323,4 +338,4 @@ def plot(g, source=None, target=None, weight=None, сolors=сolors_dict):
     node_trace = custom_edges(g.nodes(data=True), сolors, nodes_from_path=nodes_path)
     fig = draw_figure(node_trace, arrow_list, pathway=pathway_list)
 
-    return fig
+    return fig, nodes_path

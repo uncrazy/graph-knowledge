@@ -102,21 +102,16 @@ G = select_layout(G, LAYOUT)
 # else:
 #     pass
 
+# test nodes
 
 nodes = ["S03", 'CGM|D15', 'CGM|D16']
-
-# external_stylesheets = [
-#     dbc.themes.FLATLY,
-#     {
-#      'button':   'https://codepen.io/chriddyp/pen/bWLwgP.css',
-#       'input':   'https://codepen.io/chriddyp/pen/bWLwgP.css'
-#     }
-# ]
+description = [G.nodes[i]['Параметр'] for i in nodes]
+nodes_describe = zip(nodes, description)
+nodes_labels = [{'label': f"{k} - {v}", 'value': k} for k, v in nodes_describe]
 
 app = Dash(
     __name__,
     external_stylesheets=[dbc.themes.FLATLY]
-    # external_stylesheets=external_stylesheets
         )
 app.title = 'Graph knowledge'
 
@@ -135,11 +130,15 @@ SIDEBAR_STYLE = {
 
 # the styles for the main content position it to the right of the sidebar and
 # add some padding.
-CONTENT_STYLE = {
+TABS_STYLE = {
     "margin-left": "29rem",
     "margin-right": "2rem",
-    "padding": "2rem 1rem",
-    "height": "100vh"
+    "padding": "1rem 1rem",
+}
+
+CONTENT_STYLE = {
+    'width': "150vh",
+    "height": "90vh"
 }
 
 sidebar = html.Div(
@@ -152,9 +151,8 @@ sidebar = html.Div(
         dcc.Dropdown(
             id='source_node',
             placeholder='Select the source ...',
-            options=[
-                {'label': k, 'value': k} for k in nodes
-            ],
+            searchable=True,
+            options=nodes_labels,
             style={
                 'font-size': '16px',
                  'width': '24rem',
@@ -165,9 +163,8 @@ sidebar = html.Div(
         dcc.Dropdown(
             id='target_node',
             placeholder='Select the target ...',
-            options=[
-                {'label': k, 'value': k} for k in nodes
-            ],
+            searchable=True,
+            options=nodes_labels,
             style={
                 'font-size': '16px',
                  'width': '24rem',
@@ -238,12 +235,12 @@ sidebar = html.Div(
                     'margin-right': '16px',
                 }
             ),
-            dbc.Button(
-                id='gantt-chart-button',
-                color='info',
-                children='Gantt chart',
-                disabled=True,
-            )
+            # dbc.Button(
+            #     id='gantt-chart-button',
+            #     color='info',
+            #     children='Gantt chart',
+            #     disabled=True,
+            # )
             ],
             style={'textAlign': 'center', 'margin': 'auto'}
         ),
@@ -251,11 +248,29 @@ sidebar = html.Div(
     style=SIDEBAR_STYLE,
 )
 
-content = dcc.Graph(
+graph = dcc.Graph(
     id='GDM',
-    figure=plot(G, SOURCE, TARGET, WEIGHT),
+    figure=plot(G, SOURCE, TARGET, WEIGHT)[0],
     responsive=True,
     style=CONTENT_STYLE
+)
+
+tabs = {'Graph': [False, graph], 'Gantt chart': [True, 'placeholder']}
+content = dbc.Container(
+    dbc.Tabs(
+        [
+            dbc.Tab(
+                id=k,
+                children=v[1],
+                label=f"{k}",
+                tabClassName="flex-grow-2 text-center",
+                disabled=v[0]
+            )
+            for k, v in tabs.items()
+        ]
+    ),
+    className="p-4",
+    style=TABS_STYLE
 )
 
 app.layout = html.Div([sidebar, content])
@@ -335,36 +350,52 @@ app.layout = html.Div([sidebar, content])
 
 # triggered_id = callback_context.triggered[0]['prop_id']
 
+# для демо
+# @app.callback(
+#     Output('GDM', 'figure'),
+#     Output('reset-button-state', 'disabled'),
+#     Output('xml-button', 'disabled'),
+#     Output('gantt-chart-button', 'disabled'),
+#     Input('submit-button-state', 'n_clicks'),
+#     State('source_node', 'value'),
+#     State('target_node', 'value'),
+#     State('weight', 'value')
+# )
+# def update_output(n_clicks, source, target, w):
+#     if n_clicks in [0, None]:
+#         raise PreventUpdate
+#     else:
+#         # w = 'time_exp'
+#         fig = plot(G, source, target, w)
+#         return fig, False, False, False
+
 @app.callback(
     Output('GDM', 'figure'),
     Output('reset-button-state', 'disabled'),
     Output('xml-button', 'disabled'),
-    Output('gantt-chart-button', 'disabled'),
+    # Output('gantt-chart-button', 'disabled'),
+    Output('submit-button-state', 'disabled'),
+    Output('Gantt chart', 'disabled'),
     Input('submit-button-state', 'n_clicks'),
     State('source_node', 'value'),
-    State('target_node', 'value')
+    State('target_node', 'value'),
+    State('weight', 'value'),
+    Input('reset-button-state', 'n_clicks')
 )
-def update_output(n_clicks, source, target):
-    if n_clicks in [0, None]:
+def update_output(n_clicks, source, target, w, reset):
+    ctx = callback_context
+    if not ctx.triggered:
         raise PreventUpdate
     else:
-        w = 'time_exp'
-        fig = plot(G, source, target, w)
-        return fig, False, False, False
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        if button_id == 'submit-button-state':
+            fig = plot(G, source, target, w)[0]
+            return fig, False, False, True, False
+        elif button_id == 'reset-button-state':
+            fig = plot(G, None, None, None)[0]
+            return fig, True, True, False, True
 
-# @app.callback(
-#     Output('GDM', 'figure'),
-#     Output('xml-button', 'disabled'),
-#     Output('gantt-chart-button', 'disabled'),
-#     Output('reset-button-state', 'disabled'),
-#     Input('reset-button-state', 'n_clicks'),
-# )
-# def reset_output(n_clicks):
-#     if n_clicks in [0, None]:
-#         raise PreventUpdate
-#     else:
-#         fig = plot(G, None, None, None)
-#         return fig, True, True, True
+
 
 
 
