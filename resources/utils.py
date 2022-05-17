@@ -424,3 +424,28 @@ def plot(g, source=None, target=None, weight=None, сolors=сolors_dict, nodes_e
     fig = draw_figure(node_trace, arrow_list, pathway=pathway_list)
 
     return fig, nodes_path
+
+def find_description(g, node):
+    try:
+        description = g.nodes[node]['Параметр']
+    except KeyError:
+        try:
+            description = g.nodes[node]['текст действия']
+        except KeyError:
+            try:
+                description = g.nodes[node]['Текст ветвления']
+            except KeyError:
+                description = g.nodes[node]['текст выбора метода']
+
+    if '\n' in str(description):
+        description = description.replace('\n', ' ')
+    else:
+        pass
+    return str(description)[:150] # max 150 symbols
+
+def get_nodes_labels(g, nodes):
+    nodes_l = list(nodes)
+    description = [find_description(g, i) for i in nodes_l]
+    nodes_describe = zip(nodes_l, description)
+    nodes_labels = [{'label': f"{k} - {v}", 'value': k} for k, v in nodes_describe if isinstance(k, float) == False]
+    return nodes_labels

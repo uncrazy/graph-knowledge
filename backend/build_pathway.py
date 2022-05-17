@@ -1,3 +1,4 @@
+import numpy as np
 from dash import Dash, dcc, html, callback_context, callback
 from dash.dependencies import Input, Output, State
 import dash_bootstrap_components as dbc
@@ -17,10 +18,11 @@ from resources.utils import *
 model = None
 # -----------------------------
 
-actions_file_name = path.join(rpath, "data/actions_reestr_graph.xlsx")
-data_file_name = path.join(rpath, "data/data_model_graph.xlsx")
-branching_name = path.join(rpath, "data/vetvleniq_graph.xlsx")
-method_selection_block_name = path.join(rpath, "data/method_selection_blocks.xlsx")
+data_folder = 'data_new'
+actions_file_name = path.join(rpath, f"{data_folder}/actions_reestr_graph.xlsx")
+data_file_name = path.join(rpath, f"{data_folder}/data_model_graph.xlsx")
+branching_name = path.join(rpath, f"{data_folder}/vetvleniq_graph.xlsx")
+method_selection_block_name = path.join(rpath, f"{data_folder}/method_selection_blocks.xlsx")
 
 metric_types = ["intensive"]
 n_metrics = len(metric_types)
@@ -64,8 +66,8 @@ my_graph.build_structure(
     inspect=True, model=model
 )
 
-node_feature_weight = ['Времязатраты (1-10)', 'Сложность задачи (1-10)']
-weight_feature = ['time_exp', 'comp_exp']
+node_feature_weight = ['Времязатраты (1-10)', 'Сложность задачи (1-10)', 'Трудозатраты, чел*часов']
+weight_feature = ['time_exp', 'comp_exp', 'work_exp']
 columns_feature = dict(zip(node_feature_weight, weight_feature))
 
 # initializing & filtering from empty nodes
@@ -74,7 +76,7 @@ filter_graph(G)
 # add weight data to edges
 add_edge_weight(G, columns_feature)
 # rest of edges w/o any assigned weights
-empty_edges = [e for e in G.edges() if len(G[e[0]][e[1]]) != 2]  # 2 weights
+empty_edges = [e for e in G.edges() if len(G[e[0]][e[1]]) != 3]  # 3 weights
 for e in empty_edges:
     for weight in weight_feature:
         G[e[0]][e[1]][weight] = 0
@@ -104,10 +106,10 @@ G = select_layout(G, LAYOUT)
 
 # test nodes
 
-nodes = ["S03", 'CGM|D15', 'CGM|D16']
-description = [G.nodes[i]['Параметр'] for i in nodes]
-nodes_describe = zip(nodes, description)
-nodes_labels = [{'label': f"{k} - {v}", 'value': k} for k, v in nodes_describe]
+# nodes = ["S03", 'CGM|D15', 'CGM|D16']
+# description = [G.nodes[i]['Параметр'] for i in nodes]
+# nodes_describe = zip(nodes, description)
+# nodes_labels = [{'label': f"{k} - {v}", 'value': k} for k, v in nodes_describe]
 
 app = Dash(
     __name__,
@@ -123,7 +125,7 @@ SIDEBAR_STYLE = {
     "top": 0,
     "left": 0,
     "bottom": 0,
-    "width": "28rem",
+    "width": "30rem",
     "padding": "2rem 2rem 1rem 2rem",
     "background-color": "#f8f9fa",
 }
@@ -131,7 +133,7 @@ SIDEBAR_STYLE = {
 # the styles for the main content position it to the right of the sidebar and
 # add some padding.
 TABS_STYLE = {
-    "margin-left": "29rem",
+    "margin-left": "31rem",
     "margin-right": "2rem",
     "padding": "1rem 1rem",
 }
@@ -149,25 +151,28 @@ sidebar = html.Div(
             "Find the optimum path from source to target node", className="text"
         ),
         dcc.Dropdown(
-            id='source_node',
+            id='source-node',
             placeholder='Select the source ...',
             searchable=True,
-            options=nodes_labels,
+            optionHeight=90,
+            options=get_nodes_labels(G, G.nodes()),
             style={
                 'font-size': '16px',
-                 'width': '24rem',
+                 'width': '27rem',
                  'display': 'inline-block',
                  'margin-bottom': '5px'
             },
         ),
         dcc.Dropdown(
-            id='target_node',
+            id='target-node',
             placeholder='Select the target ...',
             searchable=True,
-            options=nodes_labels,
+            optionHeight=90,
+            options=get_nodes_labels(G, G.nodes()),
+            disabled=True,
             style={
                 'font-size': '16px',
-                 'width': '24rem',
+                 'width': '27rem',
                  'display': 'inline-block',
                  'margin-bottom': '8px'
             },
@@ -187,7 +192,7 @@ sidebar = html.Div(
                     {'label': k, 'value': v} for k, v in columns_feature.items()
                 ],
                 style={
-                        'width': '24rem'
+                        'width': '27rem',
                 },
             ),
         ],
@@ -226,21 +231,24 @@ sidebar = html.Div(
         html.Hr(),
         html.Div(
             [
+            html.P(
+                        "Save as:", className="text"
+                    ),
             dbc.Button(
                 id='xml-button',
                 color='info',
-                children='Convert to XML',
+                children='*.XML',
                 disabled=True,
                 style={
                     'margin-right': '16px',
                 }
             ),
-            # dbc.Button(
-            #     id='gantt-chart-button',
-            #     color='info',
-            #     children='Gantt chart',
-            #     disabled=True,
-            # )
+            dbc.Button(
+                id='xlsx-button',
+                color='info',
+                children='*.XLSX',
+                disabled=True,
+            )
             ],
             style={'textAlign': 'center', 'margin': 'auto'}
         ),
@@ -370,15 +378,27 @@ app.layout = html.Div([sidebar, content])
 #         return fig, False, False, False
 
 @app.callback(
+    Output('target-node', 'options'),
+    Output('target-node', 'disabled'),
+    Input('source-node', 'value')
+)
+def update_target(source):
+    if source in [0, None]:
+        raise PreventUpdate
+    else:
+        target_options = nx.descendants(G, source)
+        return get_nodes_labels(G, target_options), False
+
+@app.callback(
     Output('GDM', 'figure'),
     Output('reset-button-state', 'disabled'),
     Output('xml-button', 'disabled'),
-    # Output('gantt-chart-button', 'disabled'),
+    Output('xlsx-button', 'disabled'),
     Output('submit-button-state', 'disabled'),
     Output('Gantt chart', 'disabled'),
     Input('submit-button-state', 'n_clicks'),
-    State('source_node', 'value'),
-    State('target_node', 'value'),
+    State('source-node', 'value'),
+    State('target-node', 'value'),
     State('weight', 'value'),
     Input('reset-button-state', 'n_clicks')
 )
@@ -390,10 +410,10 @@ def update_output(n_clicks, source, target, w, reset):
         button_id = ctx.triggered[0]['prop_id'].split('.')[0]
         if button_id == 'submit-button-state':
             fig = plot(G, source, target, w)[0]
-            return fig, False, False, True, False
+            return fig, False, False, False, True, False
         elif button_id == 'reset-button-state':
             fig = plot(G, None, None, None)[0]
-            return fig, True, True, False, True
+            return fig, True, True, True, False, True
 
 
 
