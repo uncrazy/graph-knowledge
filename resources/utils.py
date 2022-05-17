@@ -1,5 +1,6 @@
 import collections
 import copy
+import itertools
 
 import networkx as nx
 import pandas as pd
@@ -161,7 +162,7 @@ def edge_to_arrow(edge_x, edge_y, size, width, color, opacity):
 
 
 # Customizing nodes
-def custom_edges(nodes, сolors_dict, nodes_from_path=None, alpha=0.3):
+def custom_nodes(nodes, сolors_dict, nodes_from_path=None, alpha=0.3):
     node_x = []
     node_y = []
     colors = []
@@ -173,6 +174,7 @@ def custom_edges(nodes, сolors_dict, nodes_from_path=None, alpha=0.3):
     codes = []
     symbols = []
     opacities = []
+    models = []
 
     for node in nodes:
         code = node[0]
@@ -195,6 +197,7 @@ def custom_edges(nodes, сolors_dict, nodes_from_path=None, alpha=0.3):
         # else:
         #     color_default = сolors_dict[model]
 
+        models.append(model)
         color_default = сolors_dict[model]
 
         if nodes_from_path:
@@ -211,7 +214,7 @@ def custom_edges(nodes, сolors_dict, nodes_from_path=None, alpha=0.3):
             colors.append(color_default)
             text += node['Текст ветвления']
         elif 'текст выбора метода' in node:  # ------ Блок выбора действий
-            sizes.append(25)
+            sizes.append(14)
             symbols.append('diamond')
             colors.append(color_default)
             text += node['текст выбора метода']
@@ -238,7 +241,7 @@ def custom_edges(nodes, сolors_dict, nodes_from_path=None, alpha=0.3):
             if node['Тип данных'] == 'Исходные':
                 symbols.append('circle-x')  # Круг с крестиком
             elif node['Тип данных'] == 'Промежуточные':
-                symbols.append('star-triangle-up')  # Синий
+                symbols.append('star-triangle-down')  # Синий
             elif node['Тип данных'] == 'Ветвление':
                 symbols.append('triangle-up')  # Треугольник
             elif node['Тип данных'] == 'Выходные':
@@ -264,18 +267,88 @@ def custom_edges(nodes, сolors_dict, nodes_from_path=None, alpha=0.3):
         codes.append(code)
         opacities.append(opacity)
 
-    node_trace = go.Scatter(
-        x=node_x, y=node_y,
-        mode='markers',
-        hoverinfo='text'
+    node_data = pd.DataFrame(
+        zip(models, node_x, node_y, node_text, sizes, symbols, colors, borders['color'], borders['width'], opacities),
+        columns = ['model', 'x', 'y', 'hover', 'size', 'symbol', 'color', 'border_color', 'border_width', 'opacity']
     )
+    return node_data
 
-    node_trace.marker.opacity = opacities
-    node_trace.marker.symbol = symbols
-    node_trace.marker.color = colors
-    node_trace.marker.line = borders
-    node_trace.text = node_text
-    node_trace.marker.size = sizes
+    # node_trace = go.Scatter(
+    #     x=node_x, y=node_y,
+    #     mode='markers',
+    #     hoverinfo='text',
+    # )
+    # node_trace.marker.opacity = opacities
+    # node_trace.marker.symbol = symbols
+    # node_trace.marker.color = colors
+    # node_trace.marker.line = borders
+    # node_trace.text = node_text
+    # node_trace.marker.size = sizes
+    #
+    # return node_trace
+
+# ------------------------------------
+symbols_dict = {
+    'Блок выбора': 'diamond',
+    'Ветвление': 'triangle-up',
+    'Выходные': 'circle-dot',
+    'Исходные': 'circle-x',
+    'Промежуточные': 'star-triangle-down',
+}
+# ------------------------------------
+models = сolors_dict.keys()
+tags = symbols_dict.keys()
+label_legend = {f'{r[0]} - {r[1]}':[сolors_dict[r[0]], symbols_dict[r[1]]] for r in itertools.product(models, tags)}
+
+def divide_node_data(nodes: pd.DataFrame, labels):
+    node_trace = []
+    hyper_edges = nodes[nodes['color'] == '#f0ffff'].copy() # фильтрация на гиперрёбра, добавляем в конце вне цикла
+    nodes = nodes[nodes['color'] != '#f0ffff'].copy()
+
+    for label, val in labels.items():
+        df = nodes[(nodes['color'] == val[0]) & (nodes['symbol'] == val[1])]
+
+        node_model = go.Scatter(
+            x=df['x'],
+            y=df['y'],
+            name=label,
+            mode='markers',
+            hoverinfo='text',
+            marker=dict(
+                color=val[0],
+                size=df['size'],
+                opacity=df['opacity'],
+                line=dict(
+                    width=df['border_width'],
+                    color=df['border_color']
+                ),
+                symbol=val[1]
+            ),
+            text=df['hover'],
+            showlegend=True
+        )
+        node_trace.append(node_model)
+
+    hyper_trace = go.Scatter(
+        x=hyper_edges['x'],
+        y=hyper_edges['y'],
+        name='Гиперребро',
+        mode='markers',
+        hoverinfo='text',
+        marker=dict(
+            color=hyper_edges['color'],
+            size=hyper_edges['size'],
+            opacity=hyper_edges['opacity'],
+            line=dict(
+                width=hyper_edges['border_width'],
+                color=hyper_edges['border_color']
+            ),
+            symbol=hyper_edges['symbol']
+        ),
+        text=hyper_edges['hover'],
+        showlegend=True
+        )
+    node_trace.append(hyper_trace)
 
     return node_trace
 
@@ -283,11 +356,11 @@ def custom_edges(nodes, сolors_dict, nodes_from_path=None, alpha=0.3):
 # Draw the figure with the graph
 def draw_figure(node, arrow, pathway=None):
     fig = go.Figure(
-        data=[node],
+        data=node,
         layout=go.Layout(
             title=None,
             titlefont_size=16,
-            showlegend=False,
+            showlegend=True,
             hovermode='closest',
             margin=dict(b=20, l=5, r=5, t=20),
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
@@ -301,6 +374,17 @@ def draw_figure(node, arrow, pathway=None):
     fig.update_yaxes(
         scaleanchor="x",
         scaleratio=1
+    )
+
+    fig.update_layout(
+        legend_title_text='Обозначения:',
+        # legend = dict(
+        #     x=0.01,
+        #     y=0.99,
+        #     bordercolor="Grey",
+        #     bgcolor="#f0ffff",
+        #     borderwidth=0.5
+        # )
     )
 
     return fig
@@ -335,7 +419,8 @@ def plot(g, source=None, target=None, weight=None, сolors=сolors_dict, nodes_e
         pathway_list = edge_to_arrow(edge_x_path, edge_y_path, 1, 1.5, '#432E36', 1)
 
     # preparing nodes
-    node_trace = custom_edges(g.nodes(data=True), сolors, nodes_from_path=nodes_path)
+    node_data = custom_nodes(g.nodes(data=True), сolors, nodes_from_path=nodes_path)
+    node_trace = divide_node_data(node_data, labels=label_legend)
     fig = draw_figure(node_trace, arrow_list, pathway=pathway_list)
 
     return fig, nodes_path
