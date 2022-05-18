@@ -6,6 +6,7 @@ import networkx as nx
 import pandas as pd
 from networkx.drawing.nx_agraph import graphviz_layout
 import plotly.graph_objects as go
+from dash_extensions.snippets import send_bytes
 import textwrap
 from .table import preprocess_pathway
 
@@ -91,7 +92,7 @@ def pathway(G, source, target, weight, save=True):
         res = preprocess_pathway(pd.DataFrame(data, index=list(range(len(data)))))
         res.to_csv(f'./../results/{source}_{target}_{weight}.csv', index=False)
 
-    return nodes, edges
+    return nodes, edges, res
 
 
 # Append position data to graph in terms of selected layout from interface and return updated G
@@ -407,10 +408,10 @@ def plot(g, source=None, target=None, weight=None, сolors=сolors_dict, nodes_e
         edge_x, edge_y = build_edge(g, g.edges())
         arrow_list = edge_to_arrow(edge_x, edge_y, 2, 0.5, 'grey', 0.9)
         nodes_path, pathway_list = None, None
-
+        df_path = None # нет никакого пути
     # pathway layout
     else:
-        nodes_path, edges_path = pathway(g, source, target, weight)
+        nodes_path, edges_path, df_path = pathway(g, source, target, weight)
         # preparing edges
         g.remove_edges_from(edges_path)
         edge_x, edge_y = build_edge(g, g.edges())
@@ -423,7 +424,21 @@ def plot(g, source=None, target=None, weight=None, сolors=сolors_dict, nodes_e
     node_trace = divide_node_data(node_data, labels=label_legend)
     fig = draw_figure(node_trace, arrow_list, pathway=pathway_list)
 
-    return fig, nodes_path
+    return fig, nodes_path, df_path
+
+
+# def to_xlsx(bytes_io, df):
+#     xslx_writer = pd.ExcelWriter(bytes_io, engine="xlsxwriter")
+#     df.to_excel(xslx_writer, index=False, sheet_name="pathway")
+#     xslx_writer.save()
+#
+#
+# def generate_file(bytes_io, df, format, name):
+#     if format == 'xlsx':
+#         return send_bytes(to_xlsx(bytes_io, df), f"{name}.xlsx")
+#     else:
+#         pass
+
 
 def find_description(g, node):
     try:
@@ -442,6 +457,7 @@ def find_description(g, node):
     else:
         pass
     return str(description)[:150] # max 150 symbols
+
 
 def get_nodes_labels(g, nodes):
     nodes_l = list(nodes)

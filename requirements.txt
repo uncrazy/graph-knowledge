@@ -5,6 +5,7 @@ cycler==0.11.0
 dash==2.3.1
 dash-bootstrap-components==1.1.0
 dash-core-components==2.0.0
+dash-extensions==0.0.18
 dash-html-components==2.0.0
 dash-table==5.0.0
 et-xmlfile==1.1.0
@@ -20,6 +21,7 @@ Jinja2==3.1.1
 kiwisolver==1.4.2
 MarkupSafe==2.1.1
 matplotlib==3.5.1
+more-itertools==8.13.0
 networkx==2.8
 numpy==1.22.3
 openpyxl==3.0.9
@@ -39,4 +41,5 @@ starlette==0.19.1
 tenacity==8.0.1
 typing_extensions==4.2.0
 Werkzeug==2.1.1
+XlsxWriter==3.0.3
 zipp==3.8.0

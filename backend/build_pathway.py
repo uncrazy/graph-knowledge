@@ -1,6 +1,7 @@
 import numpy as np
 from dash import Dash, dcc, html, callback_context, callback
 from dash.dependencies import Input, Output, State
+from dash_extensions import Download
 import dash_bootstrap_components as dbc
 import argparse
 import sys
@@ -12,6 +13,9 @@ rpath = '../'
 sys.path.insert(0, rpath)
 from backend.NXGraph import NXGraph
 from resources.utils import *
+from resources.gantt import *
+
+PATH = './../results'
 
 # Model name if needed
 # -----------------------------
@@ -85,6 +89,17 @@ LAYOUT = 'graphviz_dot'
 # selecting layout and source & target (put in interface)
 G = select_layout(G, LAYOUT)
 
+# time perfomance test
+# import time
+# t0 = time.time()
+# source = 'S12'
+# target = 'GDM|D04'
+# weight = 'time_exp'
+# path = nx.shortest_path(G, source, target, weight=weight)
+# t1 = time.time()
+# total = t1-t0
+# print(total)
+
 # parser = argparse.ArgumentParser(description='Plot graph knowledge & pathway depends on weights')
 # group = parser.add_mutually_exclusive_group(required=True)
 # group.add_argument('-g', '--graph', action='store_true', help='Launch and show the whole graph')
@@ -135,10 +150,12 @@ SIDEBAR_STYLE = {
 TABS_STYLE = {
     "margin-left": "31rem",
     "margin-right": "2rem",
+    "margin-bottom": "1rem",
     "padding": "1rem 1rem",
 }
 
 CONTENT_STYLE = {
+    'margin-top': '10px',
     'width': "150vh",
     "height": "90vh"
 }
@@ -234,21 +251,37 @@ sidebar = html.Div(
             html.P(
                         "Save as:", className="text"
                     ),
-            dbc.Button(
-                id='xml-button',
-                color='info',
-                children='*.XML',
-                disabled=True,
+                html.Div([
+                    dbc.Button(
+                        id='xml-button',
+                        color='info',
+                        children='*.XML',
+                        disabled=True,
+                        style={
+                            'margin-right': '16px',
+                        }
+                    ),
+                    Download(id="download-xml")
+                ],
                 style={
-                    'margin-right': '16px',
+                    'margin-bottom': '5px',
+                    'textAlign': 'center'
                 }
-            ),
-            dbc.Button(
-                id='xlsx-button',
-                color='info',
-                children='*.XLSX',
-                disabled=True,
-            )
+                ),
+                html.Div([
+                    dbc.Button(
+                        id='xlsx-button',
+                        color='info',
+                        children='*.XLSX',
+                        disabled=True,
+                    ),
+                    Download(id="download-xlsx")
+                ],
+                style={
+                    'margin-right': '15px',
+                    'textAlign': 'center'
+                }
+                )
             ],
             style={'textAlign': 'center', 'margin': 'auto'}
         ),
@@ -263,7 +296,39 @@ graph = dcc.Graph(
     style=CONTENT_STYLE
 )
 
-tabs = {'Graph': [False, graph], 'Gantt chart': [True, 'placeholder']}
+table_object = html.Div(
+    [
+    html.Div(id='gantt-table', children='test_text'),
+    ],
+    style=CONTENT_STYLE
+)
+
+gantt_object = html.Div(
+    [
+    dcc.Graph(
+        id='gantt-figure',
+        responsive=True,
+        style={
+            'margin-top': '10px',
+            'width': "150vh",
+            "height": "50vh"
+        }
+    ),
+    html.Div(
+        id='software-block',
+        children='text',
+        # className='fst-normal',
+        # style={
+        #     'margin-left": "50px'
+        # }
+    )
+    ]
+)
+tabs = {
+    'Graph': [False, graph],
+    'Table': [True, table_object],
+    'Gantt chart': [True, gantt_object]
+}
 content = dbc.Container(
     dbc.Tabs(
         [
@@ -395,7 +460,11 @@ def update_target(source):
     Output('xml-button', 'disabled'),
     Output('xlsx-button', 'disabled'),
     Output('submit-button-state', 'disabled'),
+    Output('Table', 'disabled'),
     Output('Gantt chart', 'disabled'),
+    Output('gantt-table', 'children'),
+    Output('gantt-figure', 'figure'),
+    Output('software-block', 'children'),
     Input('submit-button-state', 'n_clicks'),
     State('source-node', 'value'),
     State('target-node', 'value'),
@@ -409,14 +478,40 @@ def update_output(n_clicks, source, target, w, reset):
     else:
         button_id = ctx.triggered[0]['prop_id'].split('.')[0]
         if button_id == 'submit-button-state':
-            fig = plot(G, source, target, w)[0]
-            return fig, False, False, False, True, False
+            fig, nodes_path, df_path = plot(G, source, target, w)
+            table = dbc.Table.from_dataframe(df_path, striped=True, bordered=True, hover=True)
+            software = df_path['Модуль ПО'].unique().tolist()
+            software = [i for i in software if i == i]
+            software_str = [
+                html.Strong('Используемое ПО: '),
+                html.Span(", ".join(software))
+             ]
+            gantt = get_gantt(df_path, w)
+            return fig, False, False, False, True, False, False, table, gantt, software_str
         elif button_id == 'reset-button-state':
             fig = plot(G, None, None, None)[0]
-            return fig, True, True, True, False, True
+            return fig, True, True, True, False, True, True, None, {}, None
 
+@app.callback(
+    Output("download-xlsx", "data"),
+    Input("xlsx-button", "n_clicks"),
+    State('source-node', 'value'),
+    State('target-node', 'value'),
+    State('weight', 'value')
+)
+def generate_xlsx(n_clicks, source, target, w, bytes_io=None):
+    if n_clicks in [0, None]:
+        raise PreventUpdate
+    else:
+        df = plot(G, source, target, w)[2]
+        name = f'{source}_{target}_{w}'
+        def to_xlsx(bytes_io):
+            xlsx_writer = pd.ExcelWriter(bytes_io, engine="xlsxwriter")
+            df.to_excel(xlsx_writer, index=False, sheet_name="pathway")
+            xlsx_writer.save()
 
-
+        return send_bytes(to_xlsx, f"{name}.xlsx")
+        # return generate_file(bytes_io, df_path, 'xlsx', name)
 
 
 if __name__ == '__main__':
