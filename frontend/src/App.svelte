@@ -1,10 +1,9 @@
 <script>
     import { writable, get } from 'svelte/store';
-    import PokemanCard from "../components/pokemanCard.svelte";
-
-    import {pokemon, fetchPokemon} from "../pokestore";
-    import {inputChosens, outputChosens, config} from '../pokestore';
-    import SplitPane from '../components/SplitPane.svelte'
+    import PokemanCard from "./components/pokemanCard.svelte";
+    import {pokemon, fetchPokemon} from "./pokestore";
+    import {inputChosens, outputChosens, config} from './pokestore';
+    import SplitPane from './components/SplitPane.svelte'
 
 
     let searchTerm = "";

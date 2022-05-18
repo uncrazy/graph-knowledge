@@ -511,7 +511,6 @@ def generate_xlsx(n_clicks, source, target, w, bytes_io=None):
             xlsx_writer.save()
 
         return send_bytes(to_xlsx, f"{name}.xlsx")
-        # return generate_file(bytes_io, df_path, 'xlsx', name)
 
 
 if __name__ == '__main__':
