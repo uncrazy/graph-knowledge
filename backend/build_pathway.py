@@ -13,6 +13,11 @@ sys.path.insert(0, rpath)
 from backend.NXGraph import NXGraph
 from resources.utils import *
 
+import dash
+from dash import Dash, dcc, html, Input, Output
+from dash.exceptions import PreventUpdate
+import argparse
+
 # Model name if needed
 # -----------------------------
 model = None
@@ -416,8 +421,35 @@ def update_output(n_clicks, source, target, w, reset):
             return fig, True, True, True, False, True
 
 
-
-
-
 if __name__ == '__main__':
     app.run_server(host="127.0.0.1", port="8050", debug=True, use_reloader=False)
+    graph = dcc.Graph(id='GDM',
+                      figure=plot(G, SOURCE, TARGET, WEIGHT),
+                      responsive=True,
+                      style={'height': '100vh'})
+    button = html.Button('Make api call', id='button', n_clicks=0)
+    app.layout = html.Div(
+        children=[graph],
+        style={'height': '100vh'}
+    )
+
+    server = app.server
+
+    @server.route("/replot")
+    def update_data(nclicks=1):
+        """Retrieves data from api call
+
+        Parameters
+        ----------
+        nclicks : int | None
+            The number of times the button was pressed.
+            Used to prevent initial update with empty state.
+
+        """
+        if nclicks in [0, None]:
+            raise PreventUpdate
+        else:
+            data = plot(G, "S03", "CGM|D15", "time_exp")
+            return data
+
+    server.run(host="127.0.0.1", port=8050, debug=True, use_reloader=False)

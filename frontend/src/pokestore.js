@@ -5,7 +5,7 @@ export const inputChosens = writable([]);
 export const outputChosens = writable([]);
 export const config = {
 	'graphDataUrl': 'http://localhost:8000/data',
-	'graphInstanceUrl': 'http://localhost:8050'
+	'graphInstanceUrl': 'http://localhost:8000/dash/'
 }
 
 

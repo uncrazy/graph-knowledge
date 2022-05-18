@@ -89,7 +89,7 @@ def pathway(G, source, target, weight, save=True):
             d = G.nodes[el]
             data.append(d)
         res = preprocess_pathway(pd.DataFrame(data, index=list(range(len(data)))))
-        res.to_csv(f'./../results/{source}_{target}_{weight}.csv', index=False)
+        # res.to_csv(f'./results/{source}_{target}_{weight}.csv', index=False)
 
     return nodes, edges
 

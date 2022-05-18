@@ -2,13 +2,14 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-
-import sys
-sys.path.append('./../')
-print(sys.path)
-
-
+from fastapi.middleware.wsgi import WSGIMiddleware
 from backend.graph_actions import get_graph
+from backend.dashapp import create_dash_app
+from resources.utils import plot
+from starlette.responses import RedirectResponse
+import uvicorn
+import flask
+from flask_cors import CORS, cross_origin
 
 
 rename_keys = {
@@ -29,23 +30,30 @@ for node in G.nodes(data=True):
         temp[v] = temp.pop(k)  # Renaming keys
     nodes_data_arr.append(temp)
     nodes_data[node_data['name']] = node_data
-#%%
+
 
 app = FastAPI()
 origins = [
     "http://localhost.tiangolo.com",
     "https://localhost.tiangolo.com",
-        "http://localhost:8000",
-    "http://localhost:3000",
+    "http://localhost:8000/",
+    "http://localhost:8000/data",
+    "http://localhost:8000/dash",
+    "http://localhost:8050/"
+    "http://localhost:3000/",
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# figure = plot(G)
+dash_app = create_dash_app(G=G,
+                           requests_pathname_prefix="/dash/")
 
 
 @app.get('/nodes/{name}')
@@ -58,61 +66,10 @@ def get_data():
     return ORJSONResponse(nodes_data_arr)
 
 
-@app.get("/testdata")
-def get_testdata():
-    data = [
-        {
-            "id": 1,
-            "name": "Asia",
-            "population": "4,624,520,000",
-            "no_of_countries": 50,
-            "area": "44,579,000"
-        },
-        {
-            "id": 2,
-            "name": "Africa",
-            "population": "1,327,042,300",
-            "no_of_countries": 54,
-            "area": "30,370,000"
-        },
-        {
-            "id": 3,
-            "name": "North America",
-            "population": "590,176,500",
-            "no_of_countries": 23,
-            "area": "24,709,000"
-        },
-        {
-            "id": 4,
-            "name": "South America",
-            "population": "429,276,300",
-            "no_of_countries": 12,
-            "area": "17,840,000"
-        },
-        {
-            "id": 5,
-            "name": "Antartica",
-            "population": "No real data on populants",
-            "no_of_countries": 0,
-            "area": "14,000,000"
-        },
-        {
-            "id": 6,
-            "name": "Europe",
-            "population": "747,447,200",
-            "no_of_countries": 51,
-            "area": "10,180,000"
-        },
-        {
-            "id": 7,
-            "name": "Australia",
-            "population": "42,448,700",
-            "no_of_countries": 14,
-            "area": "8,600,000"
-        }
-    ]
-    return ORJSONResponse(data)
-
-
 # Place After All Other Routes
-app.mount('', StaticFiles(directory="./../frontend/public/", html=True), name="static")
+app.mount("/dash", WSGIMiddleware(dash_app.server))
+app.mount("/images", StaticFiles(directory="frontend/images"), name="images")
+app.mount("", StaticFiles(directory="frontend/public", html=True), name="build")
+
+if __name__ == '__main__':
+    uvicorn.run(app, host="127.0.0.1", port=8000)
