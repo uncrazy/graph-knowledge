@@ -103,4 +103,85 @@ def get_gantt(df, weight_label):
     new_fig = go.Figure(data=fig.data + dia.data, layout=fig.layout)
     new_fig.update_layout(showlegend=True)
 
-    return new_fig
+    return new_fig, df
+
+
+def create_xml(df, weight_label, name):
+    node_feature_weight = ['Времязатраты (1-10)', 'Сложность задачи (1-10)', 'Трудозатраты, чел*часов']
+    weight_feature = ['time_exp', 'comp_exp', 'work_exp']
+    columns_feature = dict(zip(weight_feature, node_feature_weight))
+    weight_col = columns_feature[weight_label]
+
+    if jpype.isJVMStarted():
+        pass
+    else:
+        jpype.startJVM()
+
+    from java.lang import Double
+    from java.text import SimpleDateFormat
+    from net.sf.mpxj import ProjectFile, TaskField, Duration, TimeUnit, RelationType
+    from net.sf.mpxj.writer import ProjectWriter,   ProjectWriterUtility
+    from java.io import OutputStream, ByteArrayOutputStream, IOException
+
+    df_java = SimpleDateFormat("dd/MM/yyyy HH:mm:ss")
+
+    # Create a ProjectFile instance
+    file = ProjectFile()
+
+    # Add a default calendar called "Standard"
+    calendar = file.addDefaultBaseCalendar()
+
+    properties = file.getProjectProperties()
+    properties.setStartDate(df_java.parse(datetime.datetime.today().strftime("%d/%m/%Y %H:%M:%S")))
+
+    # Set a couple more properties just for fun
+    properties.setProjectTitle("Created by GRAPH KNOWLEDGE")
+
+    # Let's create an alias for TEXT1
+    customFields = file.getCustomFields()
+    field = customFields.getCustomField(TaskField.TEXT1)
+    field.setAlias("My Custom Field")
+
+    # Create a summary task
+    task1 = file.addTask()
+    start = df['Идентификатор'].iloc[0]
+    end = df['Идентификатор'].iloc[df.shape[0] - 1]
+    task1.setName(f"{start} -> {end}")  # A --> B
+
+    tasks = {}
+    for i in range(len(df)):
+        tasks[i] = task1.addTask()
+        tasks[i].setName(df['Идентификатор'].iloc[i])
+        tasks[i].setDuration(Duration.getInstance(df[weight_col].iloc[i], TimeUnit.HOURS))
+        tasks[i].setStart(df_java.parse(pd.to_datetime(df['Start Date']).dt.strftime("%d/%m/%Y %H:%M:%S").iloc[i]))
+
+        description = df['Описание'].iloc[i]
+        description = description.replace('\n', ', ')
+        tasks[i].setText(1, description)  # название параметра
+
+        software = df['Модуль ПО'].iloc[i]
+        if isinstance(software, str):
+            software = software.replace('\n', ', ')
+            resource = file.addResource()
+            resource.setName(software)
+            assignment = tasks[i].addResourceAssignment(resource)
+        else:
+            pass
+
+        if i != 0:
+            tasks[i].addPredecessor(tasks[i - 1], RelationType.FINISH_START, None)
+        else:
+            continue
+
+    writer = ProjectWriterUtility.getProjectWriter(f"{name}.xml")
+    # output = OutputStream()
+    # writer.write(file, f"{name}.xml")
+
+    out = ByteArrayOutputStream()
+    writer.write(file, out)
+    string_out = str(out)
+    bytes_file = string_out.encode(encoding='UTF-8')
+    return bytes_file
+
+    # return buffer.write(file)
+    # jpype.shutdownJVM()

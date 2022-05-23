@@ -6,7 +6,6 @@ import networkx as nx
 import pandas as pd
 from networkx.drawing.nx_agraph import graphviz_layout
 import plotly.graph_objects as go
-from dash_extensions.snippets import send_bytes
 import textwrap
 from .table import preprocess_pathway
 

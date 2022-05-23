@@ -1,4 +1,5 @@
 import numpy as np
+import io
 from dash import Dash, dcc, html, callback_context, callback
 from dash.dependencies import Input, Output, State
 from dash_extensions import Download
@@ -6,7 +7,7 @@ import dash_bootstrap_components as dbc
 import argparse
 import sys
 from os import path
-
+from dash_extensions.snippets import send_bytes
 from dash.exceptions import PreventUpdate
 
 rpath = '../'
@@ -486,7 +487,7 @@ def update_output(n_clicks, source, target, w, reset):
                 html.Strong('Используемое ПО: '),
                 html.Span(", ".join(software))
              ]
-            gantt = get_gantt(df_path, w)
+            gantt = get_gantt(df_path, w)[0]
             return fig, False, False, False, True, False, False, table, gantt, software_str
         elif button_id == 'reset-button-state':
             fig = plot(G, None, None, None)[0]
@@ -513,5 +514,31 @@ def generate_xlsx(n_clicks, source, target, w, bytes_io=None):
         return send_bytes(to_xlsx, f"{name}.xlsx")
 
 
+@app.callback(
+    Output("download-xml", "data"),
+    Input("xml-button", "n_clicks"),
+    State('source-node', 'value'),
+    State('target-node', 'value'),
+    State('weight', 'value')
+)
+def generate_xml(n_clicks, source, target, w):
+    if n_clicks in [0, None]:
+        raise PreventUpdate
+    else:
+        df_path = plot(G, source, target, w)[2] # csv
+        gantt = get_gantt(df_path, w)[1]
+        name = f'{source}_{target}_{w}'
+        # buffer = io.BytesIO()
+        # buffer.write(create_xml(gantt, w, name))
+        # buffer.seek(0)
+
+        def to_xml(bytes_io):
+            stream = create_xml(gantt, w, name)
+            bytes_io.write(stream)
+
+        # return send_bytes(buffer, f"{name}.xml")
+        return send_bytes(to_xml, f"{name}.xml")
+
+
 if __name__ == '__main__':
-    app.run_server(host="127.0.0.1", port="8050", debug=True, use_reloader=False)
+    app.run_server(host="127.0.0.1", port="8052", debug=True, use_reloader=False)
