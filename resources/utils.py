@@ -80,6 +80,8 @@ def add_edge_weight(G, columns, col_in='ins', col_out='outs', weight_filler=0):
 
 # Find path between two nodes
 def pathway(G, source, target, weight, save=True):
+    source = source[0]
+    target = target[0]
     nodes = nx.shortest_path(G, source, target, weight=weight)
     edges = list(zip(nodes, nodes[1:]))
 
@@ -89,7 +91,7 @@ def pathway(G, source, target, weight, save=True):
             d = G.nodes[el]
             data.append(d)
         res = preprocess_pathway(pd.DataFrame(data, index=list(range(len(data)))))
-        # res.to_csv(f'./results/{source}_{target}_{weight}.csv', index=False)
+        res.to_csv(f'./../results/{source}_{target}_{weight}.csv', index=False)
 
     return nodes, edges, res
 
@@ -390,17 +392,41 @@ def draw_figure(node, arrow, pathway=None):
     return fig
 
 
+# Выделить ноды, которые не имеют либо выхода, либо вход (автономные)
+def get_autonomous_nodes(g, subset=None):
+    if subset:
+        return [i for i in subset if g.in_degree()[i] == 0 or g.out_degree()[i] == 0]
+    else:
+        return [i for i in list(g.nodes()) if g.in_degree()[i] == 0 or g.out_degree()[i] == 0]
+
+
+# Фильтрация (убираем ноду --> убираем рёбра и автономные гиперрёбра)
+def remove_nodes_n_edges(g, nodes_except):
+    edges_except = [(start, end) for start, end in g.edges if start in nodes_except or end in nodes_except]
+    g.remove_nodes_from(nodes_except)
+    g.remove_edges_from(edges_except)
+
+    # поиск связанных нод
+    linked_nodes = list(set(list(itertools.chain.from_iterable(edges_except))) - set(nodes_except))
+    return g, linked_nodes
+
+
 # Final plot
-def plot(g, source=None, target=None, weight=None, сolors=сolors_dict, nodes_exceptions=None):
+def plot(g, source=None, target=None, weight=None, сolors=сolors_dict, nodes_except=None):
     g = copy.deepcopy(g) # to avoid removing edges after second and following tries
 
     # remove nodes and edges from the exceptions list
-    if not nodes_exceptions:
+    if not nodes_except:
         pass
     else:
-        g.remove_nodes_from(nodes_exceptions)
-        edges_exceptions = [(start, end) for start, end in g.edges if start in nodes_exceptions]
-        g.remove_edges_from(edges_exceptions)
+        g, linked_nodes = remove_nodes_n_edges(g, nodes_except)
+        autonomous = get_autonomous_nodes(g, linked_nodes)
+        g, linked_nodes_2 = remove_nodes_n_edges(g, autonomous)
+        filter_graph(g)
+
+        # g.remove_nodes_from(nodes_except)
+        # edges_except = [(start, end) for start, end in g.edges if start in nodes_except or end in nodes_except]
+        # g.remove_edges_from(edges_except)
 
     # classic layout - full graph
     if not (source and target and weight):
@@ -458,9 +484,17 @@ def find_description(g, node):
     return str(description)[:150] # max 150 symbols
 
 
-def get_nodes_labels(g, nodes):
+def get_nodes_labels(g, nodes, filter_hyperedge=False):
     nodes_l = list(nodes)
+
+    # фильтрация только на вершины (без гиперрёбер)
+    if filter_hyperedge:
+        nodes_l = [i for i in nodes_l if 'текст действия' not in g.nodes()[i].keys()]
+    else:
+        pass
+
     description = [find_description(g, i) for i in nodes_l]
     nodes_describe = zip(nodes_l, description)
     nodes_labels = [{'label': f"{k} - {v}", 'value': k} for k, v in nodes_describe if isinstance(k, float) == False]
-    return nodes_labels
+    nodes_sorted = sorted(nodes_labels, key=lambda d: d['value'])
+    return nodes_sorted

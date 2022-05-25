@@ -89,6 +89,8 @@ for e in empty_edges:
 LAYOUT = 'graphviz_dot'
 # selecting layout and source & target (put in interface)
 G = select_layout(G, LAYOUT)
+autonomous_nodes = get_autonomous_nodes(G)
+# autonomous_nodes = [i for i in list(G.nodes()) if G.in_degree()[i] == 0 or G.out_degree()[i] == 0]
 
 # time perfomance test
 # import time
@@ -173,11 +175,12 @@ sidebar = html.Div(
             placeholder='Select the source ...',
             searchable=True,
             optionHeight=90,
-            options=get_nodes_labels(G, G.nodes()),
+            options=get_nodes_labels(G, G.nodes(), filter_hyperedge=True),
+            multi=True,
             style={
                 'font-size': '16px',
                  'width': '27rem',
-                 'display': 'inline-block',
+                 # 'display': 'inline-block',
                  'margin-bottom': '5px'
             },
         ),
@@ -186,12 +189,13 @@ sidebar = html.Div(
             placeholder='Select the target ...',
             searchable=True,
             optionHeight=90,
-            options=get_nodes_labels(G, G.nodes()),
+            options=get_nodes_labels(G, G.nodes(), filter_hyperedge=True),
             disabled=True,
+            multi=True,
             style={
                 'font-size': '16px',
                  'width': '27rem',
-                 'display': 'inline-block',
+                 # 'display': 'inline-block',
                  'margin-bottom': '8px'
             },
         ),
@@ -325,18 +329,56 @@ gantt_object = html.Div(
     )
     ]
 )
+
+setup_object = html.Div(
+    [
+        dbc.Button(
+            id='update-graph',
+            color='success',
+            children='Update',
+            n_clicks=0
+        ),
+        dcc.Checklist(
+            id="all-or-none",
+            options=[{"label": "Select All", "value": "All"}],
+            value=["All"],
+            labelStyle={"display": "inline-block"},
+            inputStyle={"margin-right": "10px"}
+            ),
+        dcc.Checklist(
+            id='features-select',
+            options=get_nodes_labels(G, autonomous_nodes),
+            value=autonomous_nodes,
+            labelStyle = dict(display='block'),
+            inputStyle={"margin-right": "10px"},
+            style={
+                'width': "100vh",
+                "height": "90vh",
+                "overflow":"auto"
+            }
+        ),
+    ],
+    style={
+        'margin-top': '10px',
+        'width': "100vh",
+        "height": "90vh"
+    }
+)
+
 tabs = {
-    'Graph': [False, graph],
-    'Table': [True, table_object],
-    'Gantt chart': [True, gantt_object]
+    'Graph': [False, graph, '🧠'],
+    'Table': [True, table_object, '🗄️'],
+    'Gantt chart': [True, gantt_object, '📈'],
+    'Setup': [False, setup_object, '⚙️']
 }
+
 content = dbc.Container(
     dbc.Tabs(
         [
             dbc.Tab(
                 id=k,
                 children=v[1],
-                label=f"{k}",
+                label=f"{v[2]} {k}",
                 tabClassName="flex-grow-2 text-center",
                 disabled=v[0]
             )
@@ -452,27 +494,36 @@ def update_target(source):
     if source in [0, None]:
         raise PreventUpdate
     else:
-        target_options = nx.descendants(G, source)
+        target_options = []
+        for s in source: # for 1-item list
+            target_options = nx.descendants(G, s)
         return get_nodes_labels(G, target_options), False
 
 @app.callback(
-    Output('GDM', 'figure'),
-    Output('reset-button-state', 'disabled'),
-    Output('xml-button', 'disabled'),
-    Output('xlsx-button', 'disabled'),
-    Output('submit-button-state', 'disabled'),
-    Output('Table', 'disabled'),
-    Output('Gantt chart', 'disabled'),
-    Output('gantt-table', 'children'),
-    Output('gantt-figure', 'figure'),
-    Output('software-block', 'children'),
-    Input('submit-button-state', 'n_clicks'),
-    State('source-node', 'value'),
-    State('target-node', 'value'),
-    State('weight', 'value'),
-    Input('reset-button-state', 'n_clicks')
+    [
+        Output('GDM', 'figure'),
+        Output('reset-button-state', 'disabled'),
+        Output('xml-button', 'disabled'),
+        Output('xlsx-button', 'disabled'),
+        Output('submit-button-state', 'disabled'),
+        Output('Table', 'disabled'),
+        Output('Gantt chart', 'disabled'),
+        Output('gantt-table', 'children'),
+        Output('gantt-figure', 'figure'),
+        Output('software-block', 'children')
+    ],
+    [
+        Input('submit-button-state', 'n_clicks'),
+        State('source-node', 'value'),
+        State('target-node', 'value'),
+        State('weight', 'value'),
+        Input('reset-button-state', 'n_clicks'),
+        Input('update-graph', 'n_clicks'),
+        State("features-select", "value")
+
+    ]
 )
-def update_output(n_clicks, source, target, w, reset):
+def update_output(submit, source, target, w, reset, update, features_selected):
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
@@ -488,10 +539,14 @@ def update_output(n_clicks, source, target, w, reset):
                 html.Span(", ".join(software))
              ]
             gantt = get_gantt(df_path, w)[0]
-            return fig, False, False, False, True, False, False, table, gantt, software_str
+            return [fig, False, False, False, True, False, False, table, gantt, software_str]
         elif button_id == 'reset-button-state':
             fig = plot(G, None, None, None)[0]
-            return fig, True, True, True, False, True, True, None, {}, None
+            return [fig, True, True, True, False, True, True, None, {}, None]
+        elif button_id == 'update-graph':
+            exceptions = list(set(autonomous_nodes) - set(features_selected))
+            fig = plot(G, None, None, None, nodes_except=exceptions)[0]
+            return [fig, False, True, True, False, True, True, None, {}, None]
 
 @app.callback(
     Output("download-xlsx", "data"),
@@ -539,6 +594,31 @@ def generate_xml(n_clicks, source, target, w):
         # return send_bytes(buffer, f"{name}.xml")
         return send_bytes(to_xml, f"{name}.xml")
 
+@app.callback(
+    Output("features-select", "value"),
+    Output("all-or-none", "value"),
+    Input("features-select", "value"),
+    Input("all-or-none", "value"),
+)
+def sync_checklists(options_selected, all_selected):
+    ctx = callback_context
+    input_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    if input_id == "features-select":
+        all_selected = ["All"] if set(options_selected) == set(autonomous_nodes) else []
+    else:
+        options_selected = autonomous_nodes if all_selected else []
+    return options_selected, all_selected
+
+# @app.callback(
+#     Output("features-select", "value"),
+#     [Input("all-or-none", "value")],
+#     [State("features-select", "options")],
+# )
+# def select_all_none(all_selected, options):
+#     all_or_none = []
+#     all_or_none = [option["value"] for option in options if all_selected]
+#     return all_or_none
+
 
 if __name__ == '__main__':
-    app.run_server(host="127.0.0.1", port="8052", debug=True, use_reloader=False)
+    app.run_server(host="127.0.0.1", port="8050", debug=True, use_reloader=False)

@@ -50,5 +50,14 @@ def preprocess_pathway(df):
     df2['Тип данных'] = 'Действие'
     df2 = df2.dropna(subset=['Код модели', 'Категория'])
     df1.update(df2)
+
+    for col in df1.columns:
+        df1[col] = df1[col].astype(str)
+    for col in df2.columns:
+        if col in ['Трудозатраты, чел*часов', 'Времязатраты (1-10)', 'Сложность задачи (1-10)']:
+            pass
+        else:
+            df2[col] = df2[col].astype(str)
+
     res = df1.merge(df2, how='left')
     return res
