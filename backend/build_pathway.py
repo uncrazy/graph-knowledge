@@ -573,6 +573,7 @@ def update_output(submit, source, target, w, reset, update, features_selected, l
             table = dbc.Table.from_dataframe(df_path, striped=True, bordered=True, hover=True)
             software = df_path['Модуль ПО'].unique().tolist()
             software = [i for i in software if i == i]
+            software = list(set(map(lambda x: x.strip(), ','.join(software).split((',')))))
             software_str = [
                 html.Strong('Используемое ПО: '),
                 html.Span(", ".join(software))
