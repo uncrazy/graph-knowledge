@@ -91,16 +91,24 @@ def pathway(G, source, target, weight, save=True):
             d = G.nodes[el]
             data.append(d)
         res = preprocess_pathway(pd.DataFrame(data, index=list(range(len(data)))))
+        res['Трудозатраты, чел*часов'] = res['Трудозатраты, чел*часов'].astype(float)
         res.to_csv(f'./../results/{source}_{target}_{weight}.csv', index=False)
-
     return nodes, edges, res
+
+
+def select_layout_graphviz(G, pos):
+    pos = graphviz_layout(G, prog=pos, root=None)
+
+    for node in G.nodes:
+        G.nodes[node]['pos'] = tuple(pos[node])
+    return G
 
 
 # Append position data to graph in terms of selected layout from interface and return updated G
 def select_layout(G, pos):
     if pos == 'spring':
         pos = nx.spring_layout(G)
-    elif pos == 'graphviz_dot':
+    elif pos == 'dot':
         pos = graphviz_layout(G, prog='dot', root=None)
     else:
         return 'Unknown layout'
@@ -412,7 +420,8 @@ def remove_nodes_n_edges(g, nodes_except):
 
 
 # Final plot
-def plot(g, source=None, target=None, weight=None, сolors=сolors_dict, nodes_except=None):
+def plot(g, source=None, target=None, weight=None, сolors=сolors_dict, nodes_except=None, layout='dot'):
+    g = select_layout_graphviz(g, layout)
     g = copy.deepcopy(g) # to avoid removing edges after second and following tries
 
     # remove nodes and edges from the exceptions list

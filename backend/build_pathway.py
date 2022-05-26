@@ -12,7 +12,7 @@ from dash.exceptions import PreventUpdate
 
 rpath = '../'
 sys.path.insert(0, rpath)
-from backend.NXGraph import NXGraph
+from backend.NXGraph_ver2 import NXGraph
 from resources.utils import *
 from resources.gantt import *
 
@@ -23,7 +23,7 @@ PATH = './../results'
 model = None
 # -----------------------------
 
-data_folder = 'data_new'
+data_folder = 'data_2505'
 actions_file_name = path.join(rpath, f"{data_folder}/actions_reestr_graph.xlsx")
 data_file_name = path.join(rpath, f"{data_folder}/data_model_graph.xlsx")
 branching_name = path.join(rpath, f"{data_folder}/vetvleniq_graph.xlsx")
@@ -51,7 +51,7 @@ arrows = list(zip(one_action.ins, one_action.name)) + list(zip(one_action.name, 
 actions = list(zip(zip(one_action.ins, one_action.name), zip(one_action.name, one_action.outs)))
 
 data_df = pd.read_excel(data_file_name)
-data_df.rename(columns={"Код": "name"}, inplace=True)
+data_df.rename(columns={"Код": "name", 'Тип даных': 'Тип данных'}, inplace=True)
 branchings_df = pd.read_excel(branching_name)
 branchings_df.rename(columns={"код\nветвления": "name"}, inplace=True)
 method_selection_blocks_df = pd.read_excel(method_selection_block_name)
@@ -86,9 +86,9 @@ for e in empty_edges:
     for weight in weight_feature:
         G[e[0]][e[1]][weight] = 0
 
-LAYOUT = 'graphviz_dot'
+LAYOUT = 'dot'
 # selecting layout and source & target (put in interface)
-G = select_layout(G, LAYOUT)
+G = select_layout_graphviz(G, LAYOUT)
 autonomous_nodes = get_autonomous_nodes(G)
 # autonomous_nodes = [i for i in list(G.nodes()) if G.in_degree()[i] == 0 or G.out_degree()[i] == 0]
 
@@ -139,7 +139,8 @@ SOURCE, TARGET, WEIGHT = None, None, None
 
 # the style arguments for the sidebar. We use position:fixed and a fixed width
 SIDEBAR_STYLE = {
-    "position": "fixed",
+    "position": "absolute",
+    # "overflow-y": "scroll",
     "top": 0,
     "left": 0,
     "bottom": 0,
@@ -288,8 +289,43 @@ sidebar = html.Div(
                 }
                 )
             ],
-            style={'textAlign': 'center', 'margin': 'auto'}
+            style={'textAlign': 'center', 'margin': 'auto', "margin-bottom": "150px"}
         ),
+        html.Hr(),
+        html.P(
+            "Select suitable layout style for representation", className="text"
+        ),
+        dcc.Dropdown(
+            id='prog-layout',
+            placeholder='Select layout style ...',
+            searchable=False,
+            options=['dot', 'twopi', 'sfdp'],
+            value='dot',
+            style={
+                'font-size': '16px',
+                 'width': '27rem',
+                 # 'display': 'inline-block',
+                 'margin-bottom': '5px'
+            },
+        ),
+        html.Div(
+            [
+                dbc.Button(
+                    id='update-layout',
+                    outline=True,
+                    color="info",
+                    className="me-1",
+                    n_clicks=0,
+                    children='Update layout',
+                    style={
+                        'margin-top': '15px',
+                        'margin-right': '5px',
+                    },
+                ),
+            ],
+            className='d-grid gap-2 col-9 mx-auto'
+        ),
+
     ],
     style=SIDEBAR_STYLE,
 )
@@ -335,7 +371,7 @@ setup_object = html.Div(
         dbc.Button(
             id='update-graph',
             color='success',
-            children='Update',
+            children='Update visible',
             n_clicks=0
         ),
         dcc.Checklist(
@@ -353,7 +389,7 @@ setup_object = html.Div(
             inputStyle={"margin-right": "10px"},
             style={
                 'width': "100vh",
-                "height": "90vh",
+                "height": "80vh",
                 "overflow":"auto"
             }
         ),
@@ -510,7 +546,8 @@ def update_target(source):
         Output('Gantt chart', 'disabled'),
         Output('gantt-table', 'children'),
         Output('gantt-figure', 'figure'),
-        Output('software-block', 'children')
+        Output('software-block', 'children'),
+        Output('prog-layout', 'value')
     ],
     [
         Input('submit-button-state', 'n_clicks'),
@@ -519,18 +556,20 @@ def update_target(source):
         State('weight', 'value'),
         Input('reset-button-state', 'n_clicks'),
         Input('update-graph', 'n_clicks'),
-        State("features-select", "value")
+        State('features-select', 'value'),
+        State('prog-layout', 'value'),
+        Input('update-layout', 'n_clicks')
 
     ]
 )
-def update_output(submit, source, target, w, reset, update, features_selected):
+def update_output(submit, source, target, w, reset, update, features_selected, layout, update_layout):
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
     else:
         button_id = ctx.triggered[0]['prop_id'].split('.')[0]
         if button_id == 'submit-button-state':
-            fig, nodes_path, df_path = plot(G, source, target, w)
+            fig, nodes_path, df_path = plot(G, source, target, w, layout=layout)
             table = dbc.Table.from_dataframe(df_path, striped=True, bordered=True, hover=True)
             software = df_path['Модуль ПО'].unique().tolist()
             software = [i for i in software if i == i]
@@ -539,14 +578,18 @@ def update_output(submit, source, target, w, reset, update, features_selected):
                 html.Span(", ".join(software))
              ]
             gantt = get_gantt(df_path, w)[0]
-            return [fig, False, False, False, True, False, False, table, gantt, software_str]
+            return [fig, False, False, False, True, False, False, table, gantt, software_str, layout]
         elif button_id == 'reset-button-state':
             fig = plot(G, None, None, None)[0]
-            return [fig, True, True, True, False, True, True, None, {}, None]
+            return [fig, True, True, True, False, True, True, None, {}, None, 'dot']
         elif button_id == 'update-graph':
             exceptions = list(set(autonomous_nodes) - set(features_selected))
-            fig = plot(G, None, None, None, nodes_except=exceptions)[0]
-            return [fig, False, True, True, False, True, True, None, {}, None]
+            fig = plot(G, None, None, None, nodes_except=exceptions, layout=layout)[0]
+            return [fig, False, True, True, False, True, True, None, {}, None, layout]
+        elif button_id == 'update-layout':
+            # G = select_layout_graphviz(G, layout)
+            fig = plot(G, None, None, None, layout=layout)[0]
+            return [fig, False, True, True, False, True, True, None, {}, None, layout]
 
 @app.callback(
     Output("download-xlsx", "data"),

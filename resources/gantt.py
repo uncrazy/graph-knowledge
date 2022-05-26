@@ -41,6 +41,7 @@ def convert(number,
 
     TODO: добавить учет конца месяца
     '''
+    # number = float(number)
     day_ini = day
     to_day_hour = number/24  #  выводит float, где день - число перед запятой
     if len(str(to_day_hour).split('.')[0] + day_ini) > 1:  #  учет если кол-во дней больше 10
@@ -63,6 +64,15 @@ def convert(number,
     minute_ini = minute
     hour_to_min = str(round(float('.'+str(number/24).split('.')[1])*24, 5))
     minute = str(int(round(float('.'+hour_to_min.split('.')[1])*60, 2))+int(minute_ini))
+
+    if int(minute) >= 60:
+        hour = str(int(hour) + int(str(float(minute) / 60).split('.')[0]))
+        minute = str(int(round(float('.' + str(float(minute) / 60).split('.')[1]) * 60, 0)))
+        if int(hour) >= 24:
+            day = str(int(day) + int(str(float(hour) / 24).split('.')[0]))
+            hour = str(int(round(float('.' + str(float(hour) / 24).split('.')[1]) * 24, 0)))
+            if int(day) > 31:
+                print('more than 31 days!')
 
     return pd.to_datetime(month+'/'+day+'/'+year+' '+hour+':'+minute, format='%m/%d/%Y %H:%M')
 
@@ -151,12 +161,13 @@ def create_xml(df, weight_label, name):
     tasks = {}
     for i in range(len(df)):
         tasks[i] = task1.addTask()
-        tasks[i].setName(df['Идентификатор'].iloc[i])
+        id = df['Идентификатор'].iloc[i]
+        description = df['Описание'].iloc[i]
+        description = description.replace('\n', ', ')
+        tasks[i].setName(f'{id} - {description}')
         tasks[i].setDuration(Duration.getInstance(df[weight_col].iloc[i], TimeUnit.HOURS))
         tasks[i].setStart(df_java.parse(pd.to_datetime(df['Start Date']).dt.strftime("%d/%m/%Y %H:%M:%S").iloc[i]))
 
-        description = df['Описание'].iloc[i]
-        description = description.replace('\n', ', ')
         tasks[i].setText(1, description)  # название параметра
 
         software = df['Модуль ПО'].iloc[i]
