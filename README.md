@@ -9,11 +9,11 @@ python3 -m pip install -r requirements.txt
 ## Использование:
 * Рисунок всего графа
 ```bash
-python3 build_pathway.py -g
+python3 run.py -g
 ```
 * Поиск оптимального пути (method='dijkstra')
 ```bash
-python3 build_pathway.py -p source target weight
+python3 run.py -p source target weight
 ```
 Атрибут `source` — начальная вершина графа, 
 `source` — конечная, `weight` — значение веса рёбер.
@@ -23,7 +23,7 @@ python3 build_pathway.py -p source target weight
 Например:<sup>*</sup>
 
 ```bash
-python3 build_pathway.py -p S03 "CGM|D15" time_exp
+python3 run.py -p S03 "CGM|D15" time_exp
 ```
 
 Во время поиска в директорию `/results` выгружается 

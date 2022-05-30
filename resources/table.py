@@ -1,7 +1,7 @@
-import pandas as pd
+from pandas import DataFrame
 
 
-def preprocess_pathway(df):
+def preprocess_pathway(df: DataFrame) -> DataFrame:
     df1 = df[['Код модели', 'Код подмодели', 'Ветка', 'Тип данных', 'Категория',
               'Параметр', 'Описание ', 'name',
               'Формат данных (например, .SEG-Y, .png)',

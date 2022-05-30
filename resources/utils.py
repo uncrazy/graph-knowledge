@@ -1,4 +1,3 @@
-import collections
 import copy
 import itertools
 
@@ -8,6 +7,7 @@ from networkx.drawing.nx_agraph import graphviz_layout
 import plotly.graph_objects as go
 import textwrap
 from .table import preprocess_pathway
+from backend.graph import filter_graph
 
 
 # Color scheme
@@ -16,6 +16,7 @@ from .table import preprocess_pathway
 # --------------------
 
 
+# processing nodes with one in & one out edges (deprecated)
 def one_action_processed(x: tuple,
                          actions: list,
                          returned: str = 'edge') -> tuple:
@@ -27,55 +28,6 @@ def one_action_processed(x: tuple,
         return elem[0][1]
     else:
         pass
-
-
-# Filtering from autonomous nodes
-def filter_graph(G):
-    in_ = dict(G.in_degree)
-    out = dict(G.out_degree)
-    degrees = [in_, out]
-    counter = collections.Counter()
-    for i in degrees:
-        counter.update(i)
-    empty = dict((k, v) for k, v in counter.items() if v == 0)
-    for i in empty.keys():
-        G.remove_node(i)
-        print(f'Empty node {i}: no in & out degrees')  # filtering from autonomous nodes
-
-
-# check if ins and outs instance for action is str value
-def check_INOUT_action(G, node, col):
-    val = G.nodes[node][col]
-    if isinstance(val, str):
-        lst = val.split(',')  # list
-        return lst
-    else:
-        print(f'Non-str instance in node for {col} in {node}: {val}')
-        return None
-
-
-# Add additional data to allow find path by node weight
-def add_edge_weight(G, columns, col_in='ins', col_out='outs', weight_filler=0):
-    for node in G.nodes:
-        for old, new in columns.items():
-            try:
-                end_keys = check_INOUT_action(G, node, col_out)
-                start_keys = check_INOUT_action(G, node, col_in)
-                val = G.nodes[node][old]
-            except KeyError:
-                continue
-            if end_keys:
-                for i in end_keys:
-                    try:
-                        G[node][i][new] = round(val / len(end_keys), 1)
-                    except Exception as e:
-                        print(f'{e}: Node {i} not found (as end)')
-            if start_keys:
-                for j in start_keys:
-                    try:
-                        G[j][node][new] = weight_filler
-                    except Exception as e:
-                        print(f'{e}: Node {j} not found (as start)')
 
 
 # Find path between two nodes
@@ -92,7 +44,9 @@ def pathway(G, source, target, weight, save=True):
             data.append(d)
         res = preprocess_pathway(pd.DataFrame(data, index=list(range(len(data)))))
         res['Трудозатраты, чел*часов'] = res['Трудозатраты, чел*часов'].astype(float)
-        res.to_csv(f'./../results/{source}_{target}_{weight}.csv', index=False)
+
+
+        res.to_csv(f'./results/{source}_{target}_{weight}.csv', index=False)
     return nodes, edges, res
 
 
@@ -283,20 +237,6 @@ def custom_nodes(nodes, сolors_dict, nodes_from_path=None, alpha=0.3):
     )
     return node_data
 
-    # node_trace = go.Scatter(
-    #     x=node_x, y=node_y,
-    #     mode='markers',
-    #     hoverinfo='text',
-    # )
-    # node_trace.marker.opacity = opacities
-    # node_trace.marker.symbol = symbols
-    # node_trace.marker.color = colors
-    # node_trace.marker.line = borders
-    # node_trace.text = node_text
-    # node_trace.marker.size = sizes
-    #
-    # return node_trace
-
 # ------------------------------------
 symbols_dict = {
     'Блок выбора': 'diamond',
@@ -400,8 +340,8 @@ def draw_figure(node, arrow, pathway=None):
     return fig
 
 
-# Выделить ноды, которые не имеют либо выхода, либо вход (автономные)
-def get_autonomous_nodes(g, subset=None):
+# Выделить ноды, которые не имеют либо выхода, либо вход (концевые)
+def get_single_ended_nodes(g, subset=None):
     if subset:
         return [i for i in subset if g.in_degree()[i] == 0 or g.out_degree()[i] == 0]
     else:
@@ -429,9 +369,9 @@ def plot(g, source=None, target=None, weight=None, сolors=сolors_dict, nodes_e
         pass
     else:
         g, linked_nodes = remove_nodes_n_edges(g, nodes_except)
-        autonomous = get_autonomous_nodes(g, linked_nodes)
+        autonomous = get_single_ended_nodes(g, linked_nodes)
         g, linked_nodes_2 = remove_nodes_n_edges(g, autonomous)
-        filter_graph(g)
+        g = filter_graph(g)
 
         # g.remove_nodes_from(nodes_except)
         # edges_except = [(start, end) for start, end in g.edges if start in nodes_except or end in nodes_except]
@@ -459,19 +399,6 @@ def plot(g, source=None, target=None, weight=None, сolors=сolors_dict, nodes_e
     fig = draw_figure(node_trace, arrow_list, pathway=pathway_list)
 
     return fig, nodes_path, df_path
-
-
-# def to_xlsx(bytes_io, df):
-#     xslx_writer = pd.ExcelWriter(bytes_io, engine="xlsxwriter")
-#     df.to_excel(xslx_writer, index=False, sheet_name="pathway")
-#     xslx_writer.save()
-#
-#
-# def generate_file(bytes_io, df, format, name):
-#     if format == 'xlsx':
-#         return send_bytes(to_xlsx(bytes_io, df), f"{name}.xlsx")
-#     else:
-#         pass
 
 
 def find_description(g, node):
@@ -504,6 +431,6 @@ def get_nodes_labels(g, nodes, filter_hyperedge=False):
 
     description = [find_description(g, i) for i in nodes_l]
     nodes_describe = zip(nodes_l, description)
-    nodes_labels = [{'label': f"{k} - {v}", 'value': k} for k, v in nodes_describe if isinstance(k, float) == False]
+    nodes_labels = [{'label': f"{k} - {v}", 'value': k} for k, v in nodes_describe if isinstance(k, str) == True]
     nodes_sorted = sorted(nodes_labels, key=lambda d: d['value'])
     return nodes_sorted

@@ -3,7 +3,6 @@ from collections import Counter
 import pandas as pd
 import numpy as np
 
-
 class NXGraph(nx.DiGraph):
 
     """
@@ -60,12 +59,25 @@ class NXGraph(nx.DiGraph):
                     if row['MAIN MODEL'] != model:
                         continue
                 self.add_node(row['name'], **dict(row))
+                
+        # Work with method selection blocks - equivalence and data joining
+        methods_eq = {}
         if 'method_selection_blocks' in other:
+            methods_dicts = {}
             for _, row in other['method_selection_blocks'].iterrows():
                 if model is not None:
                     if row['MAIN MODEL'] != model:
                         continue
-                self.add_node(row['name'], **dict(row))
+                method_name = row['name']
+                method_dict = dict(row)
+                if method_name in methods_dicts:
+                    methods_dicts[method_name]['код\nвыхода из блока'] = method_dict['текст выбора метода']
+                else:
+                    methods_dicts[method_name] = method_dict
+                methods_eq[row['код\nвыхода из блока']] = method_name
+            for k,v in methods_dicts.items():
+                self.add_node(k, **v)
+                
         if inspect:
             v_set_cnt = Counter(v_set)
             for k, v in v_set_cnt.most_common():
@@ -94,6 +106,8 @@ class NXGraph(nx.DiGraph):
                 for in_node in ins:
                     if in_node in self:
                         self.add_edge(in_node, row['name'])
+                    elif in_node in methods_eq and methods_eq[in_node] in self:
+                        self.add_edge(methods_eq[in_node], row['name'])
                     elif inspect:
                         print(self.insp_counter() + "Входящая вершина {} ребра {} не определена".format(in_node,
                                                                                                         row['name']))
@@ -104,6 +118,8 @@ class NXGraph(nx.DiGraph):
                 for out_node in outs:
                     if out_node in self:
                         self.add_edge(row['name'], out_node)
+                    elif out_node in methods_eq and methods_eq[out_node] in self:
+                        self.add_edge(row['name'], methods_eq[out_node])
                     elif inspect:
                         print(self.insp_counter() + "Выход {} ребра {} не определен".format(out_node, row['name']))
             else:
@@ -124,18 +140,3 @@ class NXGraph(nx.DiGraph):
             for i, cc in enumerate(comps):
                 print('{}: len={}'.format(i + 1, len(cc)))
                 print(*cc)
-
-
-def test_graph():
-    test_actions_df = pd.DataFrame.from_dict({
-        'name': ['a1', 'a2', 'a3'],
-        'info': ['first_action', 'second_action', 'third_action'],
-        'ins': ['A, G', 'B', 'E'],
-        'outs': ['B', 'C', 'D, C']})
-    test_data_df = pd.DataFrame.from_dict({
-        'name': ['A', 'B', 'C', 'E', 'F', 'G'],
-        'info': ['first', 'second', 'third', 'fifth', 'sixth', 'seventh'],
-        'init_metrics': [[None], [None], [8.], [None], [None], [None]]})
-
-    my_graph = NXGraph(name="TestGraph", info="For tests")
-    my_graph.build_structure(initial_structure=(test_data_df, test_actions_df, {}), inspect=True)
