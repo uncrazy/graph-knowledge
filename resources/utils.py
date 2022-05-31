@@ -1,18 +1,19 @@
 import copy
 import itertools
-
-import networkx as nx
+from typing import Tuple, Union, List, Any, Optional, Dict
+from networkx import DiGraph, shortest_path, spring_layout
 import pandas as pd
 from networkx.drawing.nx_agraph import graphviz_layout
 import plotly.graph_objects as go
 import textwrap
-from .table import preprocess_pathway
-from backend.graph import filter_graph
 
+from resources.table import preprocess_pathway
+from backend.graph import filter_graph
+from os import makedirs
 
 # Color scheme
 # --------------------
-сolors_dict = {'CGM': '#EF476F', 'KGM': '#E09D00', 'GDM': '#06D6A0', 'PFM': '#118AB2', 'SGM': '#031D25'}
+сolors_scheme = {'CGM': '#EF476F', 'KGM': '#E09D00', 'GDM': '#06D6A0', 'PFM': '#118AB2', 'SGM': '#031D25'}
 # --------------------
 
 
@@ -30,38 +31,47 @@ def one_action_processed(x: tuple,
         pass
 
 
-# Find path between two nodes
-def pathway(G, source, target, weight, save=True):
+def pathway(g: DiGraph,
+            source: str,
+            target: str,
+            weight: str,
+            debug: bool = False) -> Tuple[Union[list, dict], List[Tuple[Any, Any]], pd.DataFrame]:
+    """
+    Find path between two nodes
+    """
     source = source[0]
     target = target[0]
-    nodes = nx.shortest_path(G, source, target, weight=weight)
+    nodes = shortest_path(g, source, target, weight=weight)
     edges = list(zip(nodes, nodes[1:]))
 
-    if save:
-        data = []
-        for el in nodes:
-            d = G.nodes[el]
-            data.append(d)
-        res = preprocess_pathway(pd.DataFrame(data, index=list(range(len(data)))))
-        res['Трудозатраты, чел*часов'] = res['Трудозатраты, чел*часов'].astype(float)
+    data = []
+    for el in nodes:
+        d = g.nodes[el]
+        data.append(d)
+    res = preprocess_pathway(pd.DataFrame(data, index=list(range(len(data)))))
+    res['Трудозатраты, чел*часов'] = res['Трудозатраты, чел*часов'].astype(float)
 
-
+    if debug:
+        makedirs('./results', exist_ok=True)
         res.to_csv(f'./results/{source}_{target}_{weight}.csv', index=False)
     return nodes, edges, res
 
 
-def select_layout_graphviz(G, pos):
-    pos = graphviz_layout(G, prog=pos, root=None)
+def select_layout_graphviz(g: DiGraph, pos: str) -> DiGraph:
+    """
+    Append position data to graph in terms of selected graphviz layout from interface and return updated graph
+    """
+    pos = graphviz_layout(g, prog=pos, root=None)
 
-    for node in G.nodes:
-        G.nodes[node]['pos'] = tuple(pos[node])
-    return G
+    for node in g.nodes:
+        g.nodes[node]['pos'] = tuple(pos[node])
+    return g
 
 
-# Append position data to graph in terms of selected layout from interface and return updated G
+# Append position data to graph in terms of selected layout from interface and return updated G (deprecated)
 def select_layout(G, pos):
     if pos == 'spring':
-        pos = nx.spring_layout(G)
+        pos = spring_layout(G)
     elif pos == 'dot':
         pos = graphviz_layout(G, prog='dot', root=None)
     else:
@@ -71,25 +81,33 @@ def select_layout(G, pos):
     return G
 
 
-# Building edges  (на их основе - annotations в виде стрелок)
-def build_edge(G, edges):
+def build_edge(g: DiGraph, edges: List[Tuple[Any, Any]]) -> Tuple[List[Optional[Any]], List[Optional[Any]]]:
+    """
+    Building edges (basement for annotations in 'arrow'-type style)
+    """
     edge_x = []
     edge_y = []
     for edge in edges:
-        x0, y0 = G.nodes[edge[0]]['pos']
-        x1, y1 = G.nodes[edge[1]]['pos']
+        x0, y0 = g.nodes[edge[0]]['pos']
+        x1, y1 = g.nodes[edge[1]]['pos']
         edge_x.append(x0)
         edge_x.append(x1)
         edge_x.append(None)
         edge_y.append(y0)
         edge_y.append(y1)
         edge_y.append(None)
-
     return edge_x, edge_y
 
 
-# Adding arrows
-def edge_to_arrow(edge_x, edge_y, size, width, color, opacity):
+def edge_to_arrow(edge_x: List[Optional[Any]],
+                  edge_y: List[Optional[Any]],
+                  size: float,
+                  width: float,
+                  color: str,
+                  opacity: float) -> List[Dict[str, Union[str, bool, int]]]:
+    """
+    Adding arrows to edges
+    """
     i = -1
     arrow_list = []
     xs = []
@@ -125,16 +143,21 @@ def edge_to_arrow(edge_x, edge_y, size, width, color, opacity):
     return arrow_list
 
 
-# Customizing nodes
-def custom_nodes(nodes, сolors_dict, nodes_from_path=None, alpha=0.3):
+def custom_nodes(nodes: list,
+                 colors_dict: Dict[str, str],
+                 nodes_from_path: Union[list, dict],
+                 alpha: float = 0.3,
+                 border_color: str = '#f0ffff',  # azure
+                 border_width: float = 1.5) -> pd.DataFrame:
+    """
+    Customizing nodes
+    """
     node_x = []
     node_y = []
     colors = []
     sizes = []
     node_text = []
-    borders = {}
-    borders['color'] = []
-    borders['width'] = []
+    borders = {'color': [], 'width': []}
     codes = []
     symbols = []
     opacities = []
@@ -146,23 +169,13 @@ def custom_nodes(nodes, сolors_dict, nodes_from_path=None, alpha=0.3):
         x, y = node['pos']
         text = ''
         text += f'<b>Код:</b> {code}<br>'
-        border_color = '#f0ffff'  # azure
-        border_width = 1.5
         try:
             model = node['MAIN MODEL']
         except KeyError:
             model = node['Код модели']
 
-        # if nodes_from_path:
-        #     if code in nodes_from_path:
-        #         color_default = сolors_dict[model]
-        #     else:
-        #         color_default = 'grey'
-        # else:
-        #     color_default = сolors_dict[model]
-
         models.append(model)
-        color_default = сolors_dict[model]
+        color_default = colors_dict[model]
 
         if nodes_from_path:
             if code in nodes_from_path:
@@ -237,7 +250,7 @@ def custom_nodes(nodes, сolors_dict, nodes_from_path=None, alpha=0.3):
     )
     return node_data
 
-# ------------------------------------
+# --------------------------------------------
 symbols_dict = {
     'Блок выбора': 'diamond',
     'Ветвление': 'triangle-up',
@@ -245,12 +258,16 @@ symbols_dict = {
     'Исходные': 'circle-x',
     'Промежуточные': 'star-triangle-down',
 }
-# ------------------------------------
-models = сolors_dict.keys()
+# --------------------------------------------
+models = сolors_scheme.keys()
 tags = symbols_dict.keys()
-label_legend = {f'{r[0]} - {r[1]}':[сolors_dict[r[0]], symbols_dict[r[1]]] for r in itertools.product(models, tags)}
+label_legend = {f'{r[0]} - {r[1]}':[сolors_scheme[r[0]], symbols_dict[r[1]]] for r in itertools.product(models, tags)}
 
-def divide_node_data(nodes: pd.DataFrame, labels):
+
+def divide_node_data(nodes: pd.DataFrame, labels: Dict[str, str]) -> List[go.Scatter]:
+    """
+    Division of node data by type of data according to labels bio
+    """
     node_trace = []
     hyper_edges = nodes[nodes['color'] == '#f0ffff'].copy() # фильтрация на гиперрёбра, добавляем в конце вне цикла
     nodes = nodes[nodes['color'] != '#f0ffff'].copy()
@@ -299,17 +316,20 @@ def divide_node_data(nodes: pd.DataFrame, labels):
         showlegend=True
         )
     node_trace.append(hyper_trace)
-
     return node_trace
 
 
-# Draw the figure with the graph
-def draw_figure(node, arrow, pathway=None):
+def draw_figure(node: List[go.Scatter],
+                arrow: List[Dict[str, Union[str, bool, int]]],
+                path_way: List[Dict[str, Union[str, bool, int]]] = None) -> go.Figure:
+    """
+    Draw the figure with the graph
+    """
     fig = go.Figure(
         data=node,
         layout=go.Layout(
             title=None,
-            titlefont_size=16,
+            # titlefont_size=16,
             showlegend=True,
             hovermode='closest',
             margin=dict(b=20, l=5, r=5, t=20),
@@ -318,8 +338,8 @@ def draw_figure(node, arrow, pathway=None):
         )
     )
 
-    if pathway:
-        arrow = arrow + pathway
+    if path_way:
+        arrow = arrow + path_way
     fig.update_layout(annotations=arrow)
     fig.update_yaxes(
         scaleanchor="x",
@@ -336,20 +356,23 @@ def draw_figure(node, arrow, pathway=None):
         #     borderwidth=0.5
         # )
     )
-
     return fig
 
 
-# Выделить ноды, которые не имеют либо выхода, либо вход (концевые)
-def get_single_ended_nodes(g, subset=None):
+def get_single_ended_nodes(g: DiGraph, subset: list = None) -> list:
+    """
+    Select single-ended nodes by subset (only input or output)
+    """
     if subset:
         return [i for i in subset if g.in_degree()[i] == 0 or g.out_degree()[i] == 0]
     else:
         return [i for i in list(g.nodes()) if g.in_degree()[i] == 0 or g.out_degree()[i] == 0]
 
 
-# Фильтрация (убираем ноду --> убираем рёбра и автономные гиперрёбра)
-def remove_nodes_n_edges(g, nodes_except):
+def remove_nodes_n_edges(g: DiGraph, nodes_except: list) -> Tuple[DiGraph, list]:
+    """
+    Graph filtration ('setup' tab): remove node and autonomous edges
+    """
     edges_except = [(start, end) for start, end in g.edges if start in nodes_except or end in nodes_except]
     g.remove_nodes_from(nodes_except)
     g.remove_edges_from(edges_except)
@@ -359,8 +382,16 @@ def remove_nodes_n_edges(g, nodes_except):
     return g, linked_nodes
 
 
-# Final plot
-def plot(g, source=None, target=None, weight=None, сolors=сolors_dict, nodes_except=None, layout='dot'):
+def plot(g: DiGraph,
+         source: str = None,
+         target: str = None,
+         weight: str = None,
+         сolors: Dict[str, str] = сolors_scheme,
+         nodes_except: list = None,
+         layout: str = 'dot') -> Tuple[go.Figure, Union[None, list, dict], Optional[pd.DataFrame]]:
+    """
+    Draw the whole plot -- main drawing functionality
+    """
     g = select_layout_graphviz(g, layout)
     g = copy.deepcopy(g) # to avoid removing edges after second and following tries
 
@@ -380,28 +411,32 @@ def plot(g, source=None, target=None, weight=None, сolors=сolors_dict, nodes_e
     # classic layout - full graph
     if not (source and target and weight):
         edge_x, edge_y = build_edge(g, g.edges())
-        arrow_list = edge_to_arrow(edge_x, edge_y, 2, 0.5, 'grey', 0.9)
+        arrow_list = edge_to_arrow(edge_x, edge_y, 2.0, 0.5, 'grey', 0.9)
         nodes_path, pathway_list = None, None
         df_path = None # нет никакого пути
+
     # pathway layout
     else:
         nodes_path, edges_path, df_path = pathway(g, source, target, weight)
         # preparing edges
         g.remove_edges_from(edges_path)
         edge_x, edge_y = build_edge(g, g.edges())
-        arrow_list = edge_to_arrow(edge_x, edge_y, 2, 0.5, 'grey', 0.3)
+        arrow_list = edge_to_arrow(edge_x, edge_y, 2.0, 0.5, 'grey', 0.3)
         edge_x_path, edge_y_path = build_edge(g, edges_path)
         pathway_list = edge_to_arrow(edge_x_path, edge_y_path, 1, 1.5, '#432E36', 1)
 
     # preparing nodes
-    node_data = custom_nodes(g.nodes(data=True), сolors, nodes_from_path=nodes_path)
+    node_data = custom_nodes(g.nodes(data=True), colors_dict=сolors, nodes_from_path=nodes_path)
     node_trace = divide_node_data(node_data, labels=label_legend)
-    fig = draw_figure(node_trace, arrow_list, pathway=pathway_list)
+    fig = draw_figure(node_trace, arrow_list, path_way=pathway_list)
 
     return fig, nodes_path, df_path
 
 
-def find_description(g, node):
+def find_description(g: DiGraph, node: str, max_symbols: int = 150) -> str:
+    """
+    Get description of the node regardless of the type
+    """
     try:
         description = g.nodes[node]['Параметр']
     except KeyError:
@@ -417,10 +452,13 @@ def find_description(g, node):
         description = description.replace('\n', ' ')
     else:
         pass
-    return str(description)[:150] # max 150 symbols
+    return str(description)[:max_symbols]
 
 
-def get_nodes_labels(g, nodes, filter_hyperedge=False):
+def get_nodes_labels(g: DiGraph, nodes: list, filter_hyperedge: bool = False) -> List[Dict[str, str]]:
+    """
+    Find nodes labels for options in dropdown & checklist
+    """
     nodes_l = list(nodes)
 
     # фильтрация только на вершины (без гиперрёбер)
@@ -431,6 +469,6 @@ def get_nodes_labels(g, nodes, filter_hyperedge=False):
 
     description = [find_description(g, i) for i in nodes_l]
     nodes_describe = zip(nodes_l, description)
-    nodes_labels = [{'label': f"{k} - {v}", 'value': k} for k, v in nodes_describe if isinstance(k, str) == True]
+    nodes_labels = [{'label': f"{k} - {v}", 'value': k} for k, v in nodes_describe if isinstance(k, str) is True]
     nodes_sorted = sorted(nodes_labels, key=lambda d: d['value'])
     return nodes_sorted

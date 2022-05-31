@@ -2,6 +2,9 @@ from pandas import DataFrame
 
 
 def preprocess_pathway(df: DataFrame) -> DataFrame:
+    """
+    Preprocessing data from data_model & actions_reestr onto one merged table (for pathway output)
+    """
     df1 = df[['Код модели', 'Код подмодели', 'Ветка', 'Тип данных', 'Категория',
               'Параметр', 'Описание ', 'name',
               'Формат данных (например, .SEG-Y, .png)',
