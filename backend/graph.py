@@ -3,6 +3,7 @@ from typing import Dict, Tuple, List, Any, Union, Optional
 import pandas as pd
 from networkx import DiGraph
 from backend.NXGraph import NXGraph
+from os import path
 
 # Weights features
 # ----------------------------------------------------------------------------------------------------
@@ -12,7 +13,8 @@ columns_feature = dict(zip(node_feature_weight, weight_feature))
 # ----------------------------------------------------------------------------------------------------
 
 
-def init_graph(data_folder: str,
+def init_graph(root: str,
+               data_folder: str,
                model: str = None,
                filter_autonomous: bool = True,
                weights: Dict[str, str] = columns_feature,
@@ -22,11 +24,10 @@ def init_graph(data_folder: str,
     branching and method selection blocks)
     """
     # paths to files
-    actions_fname = f"./{data_folder}/actions_reestr_graph.xlsx"
-    data_fname = f"./{data_folder}/data_model_graph.xlsx"
-    branching_fname = f"./{data_folder}/vetvleniq_graph.xlsx"
-    method_fname = f"./{data_folder}/method_selection_blocks.xlsx"
-
+    actions_fname = path.join(root, data_folder, 'actions_reestr_graph.xlsx')
+    data_fname = path.join(root, data_folder, 'data_model_graph.xlsx')
+    branching_fname = path.join(root, data_folder, 'vetvleniq_graph.xlsx')
+    method_fname = path.join(root, data_folder, 'method_selection_blocks.xlsx')
     # ----- actions -----
     actions_df = pd.read_excel(actions_fname)
     actions_df.rename(
